@@ -12,6 +12,7 @@ import Home from './views/Home';
 import DriverRequests from './views/DriverRequests';
 import DriverActiveTrips from './views/DriverActiveTrips';
 import DriverCreateRoute from './views/DriverCreateRoute';
+import PassengerRequestTrip from './views/PassengerRequestTrip';
 import Trips from './views/Trips';
 import MapView from './views/MapView';
 import Profile from './views/Profile';
@@ -21,7 +22,7 @@ import Settings from './views/Settings';
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
   
-  if (loading) return <div className="min-h-screen bg-zinc-900 flex items-center justify-center text-emerald-500">Cargando...</div>;
+  if (loading) return <div className="min-h-screen bg-[#f0f2f5] dark:bg-zinc-900 flex items-center justify-center text-[#00d4aa]">Cargando...</div>;
   if (!user) return <Navigate to="/login" replace />;
   
   return (
@@ -58,6 +59,13 @@ const AppRoutes = () => {
       <Route path="/driver/create-route" element={
         <ProtectedRoute>
           <DriverCreateRoute />
+        </ProtectedRoute>
+      } />
+
+      {/* Rutas de Pasajero */}
+      <Route path="/passenger/request-trip" element={
+        <ProtectedRoute>
+          <PassengerRequestTrip />
         </ProtectedRoute>
       } />
 

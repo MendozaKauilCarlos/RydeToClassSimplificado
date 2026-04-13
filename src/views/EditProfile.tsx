@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Camera, User, Mail, Phone, Car, Hash } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 export default function EditProfile() {
   const navigate = useNavigate();
+  const { userData } = useAuth();
+  const isDriver = userData?.role === 'driver';
   
   // Estados para el formulario (con datos de ejemplo basados en el perfil)
   const [formData, setFormData] = useState({
-    name: 'PAKO',
-    email: 'pakodilla3@gmail.com',
+    name: userData?.displayName || 'PAKO',
+    email: userData?.email || 'pakodilla3@gmail.com',
     phone: '+52 998 123 4567',
     vehicle: 'Nissan Versa 2022',
     plates: 'ABC-123-D'
@@ -126,50 +129,52 @@ export default function EditProfile() {
           </div>
 
           {/* Datos del Vehículo (Solo visible para conductores) */}
-          <div className="bg-white dark:bg-zinc-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-zinc-700 space-y-5 transition-colors duration-200">
-            <h3 className="text-[15px] font-bold text-[#2d3748] dark:text-zinc-100 mb-4 border-b border-gray-100 dark:border-zinc-700 pb-2">Datos del Vehículo</h3>
-            
-            {/* Vehículo */}
-            <div>
-              <label className="block text-[12px] font-bold text-[#718096] dark:text-zinc-400 uppercase tracking-wider mb-2">
-                Modelo del Vehículo
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Car size={18} className="text-[#a0aec0] dark:text-zinc-500" />
+          {isDriver && (
+            <div className="bg-white dark:bg-zinc-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-zinc-700 space-y-5 transition-colors duration-200">
+              <h3 className="text-[15px] font-bold text-[#2d3748] dark:text-zinc-100 mb-4 border-b border-gray-100 dark:border-zinc-700 pb-2">Datos del Vehículo</h3>
+              
+              {/* Vehículo */}
+              <div>
+                <label className="block text-[12px] font-bold text-[#718096] dark:text-zinc-400 uppercase tracking-wider mb-2">
+                  Modelo del Vehículo
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Car size={18} className="text-[#a0aec0] dark:text-zinc-500" />
+                  </div>
+                  <input
+                    type="text"
+                    name="vehicle"
+                    value={formData.vehicle}
+                    onChange={handleChange}
+                    className="w-full pl-10 pr-4 py-3 bg-[#f8fafc] dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-[15px] font-medium text-[#2d3748] dark:text-zinc-100 focus:outline-none focus:border-[#00d4aa] focus:ring-1 focus:ring-[#00d4aa] transition-all"
+                    placeholder="Ej. Nissan Versa 2022"
+                  />
                 </div>
-                <input
-                  type="text"
-                  name="vehicle"
-                  value={formData.vehicle}
-                  onChange={handleChange}
-                  className="w-full pl-10 pr-4 py-3 bg-[#f8fafc] dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-[15px] font-medium text-[#2d3748] dark:text-zinc-100 focus:outline-none focus:border-[#00d4aa] focus:ring-1 focus:ring-[#00d4aa] transition-all"
-                  placeholder="Ej. Nissan Versa 2022"
-                />
               </div>
-            </div>
 
-            {/* Placas */}
-            <div>
-              <label className="block text-[12px] font-bold text-[#718096] dark:text-zinc-400 uppercase tracking-wider mb-2">
-                Placas
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Hash size={18} className="text-[#a0aec0] dark:text-zinc-500" />
+              {/* Placas */}
+              <div>
+                <label className="block text-[12px] font-bold text-[#718096] dark:text-zinc-400 uppercase tracking-wider mb-2">
+                  Placas
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Hash size={18} className="text-[#a0aec0] dark:text-zinc-500" />
+                  </div>
+                  <input
+                    type="text"
+                    name="plates"
+                    value={formData.plates}
+                    onChange={handleChange}
+                    className="w-full pl-10 pr-4 py-3 bg-[#f8fafc] dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-[15px] font-medium text-[#2d3748] dark:text-zinc-100 uppercase focus:outline-none focus:border-[#00d4aa] focus:ring-1 focus:ring-[#00d4aa] transition-all"
+                    placeholder="ABC-123-D"
+                  />
                 </div>
-                <input
-                  type="text"
-                  name="plates"
-                  value={formData.plates}
-                  onChange={handleChange}
-                  className="w-full pl-10 pr-4 py-3 bg-[#f8fafc] dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-[15px] font-medium text-[#2d3748] dark:text-zinc-100 uppercase focus:outline-none focus:border-[#00d4aa] focus:ring-1 focus:ring-[#00d4aa] transition-all"
-                  placeholder="ABC-123-D"
-                />
               </div>
-            </div>
 
-          </div>
+            </div>
+          )}
 
           {/* Botón Guardar */}
           <button 

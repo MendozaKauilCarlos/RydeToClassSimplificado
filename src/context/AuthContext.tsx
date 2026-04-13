@@ -15,7 +15,6 @@ interface AuthContextType {
   userData: UserData | null;
   loading: boolean;
   loginAsDemo: (role: 'passenger' | 'driver') => void;
-  logoutDemo: () => void;
   logout: () => Promise<void>;
 }
 
@@ -24,7 +23,6 @@ const AuthContext = createContext<AuthContextType>({
   userData: null,
   loading: true,
   loginAsDemo: () => {},
-  logoutDemo: () => {},
   logout: async () => {},
 });
 
@@ -36,27 +34,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const [isDemo, setIsDemo] = useState(false);
 
-  // Funciones para el Modo Demo
   const loginAsDemo = (role: 'passenger' | 'driver') => {
     setIsDemo(true);
-    setUser({ uid: 'demo-user-123', email: 'demo@ridetoclass.com' });
+    setUser({ uid: 'demo-user-123', email: 'demo@ridetoclass.com', displayName: 'Usuario Demo' });
     setUserData({
       uid: 'demo-user-123',
       email: 'demo@ridetoclass.com',
       displayName: 'Usuario Demo',
       role: role
     });
-  };
-
-  const logoutDemo = () => {
-    setIsDemo(false);
-    setUser(null);
-    setUserData(null);
+    setLoading(false);
   };
 
   const logout = async () => {
     if (isDemo) {
-      logoutDemo();
+      setIsDemo(false);
+      setUser(null);
+      setUserData(null);
     } else {
       try {
         await signOut(auth);
@@ -73,7 +67,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (isDemo) return; // Ignorar Firebase si estamos en demo
+      if (isDemo) return;
       
       setUser(firebaseUser);
       
@@ -100,7 +94,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [isDemo]);
 
   return (
-    <AuthContext.Provider value={{ user, userData, loading, loginAsDemo, logoutDemo, logout }}>
+    <AuthContext.Provider value={{ user, userData, loading, loginAsDemo, logout }}>
       {!loading && children}
     </AuthContext.Provider>
   );

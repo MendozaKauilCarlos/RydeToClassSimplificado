@@ -1,85 +1,90 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, User, MapPin, Flag, Clock, Bell, Menu } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { getUserTrips, getDriverTrips } from '../services/db';
 
 // Tipos de estado de viaje
-type TripStatus = 'COMPLETADO' | 'CANCELADO' | 'SOLICITADO' | 'EN_PROGRESO';
+type TripStatus = 'COMPLETADO' | 'CANCELADO' | 'SOLICITADO' | 'EN_PROGRESO' | string;
 
-// Interfaz para los datos del viaje (basada en la captura)
+// Interfaz para los datos del viaje
 interface Trip {
   id: string;
   status: TripStatus;
-  driverId: string; // El que dice "undefined" en la captura
-  passengerName: string;
-  coordinates: string;
-  address: string;
-  time: string;
-  price: string;
+  driverId?: string;
+  passengerName?: string;
+  origin?: string;
+  destination?: string;
+  time?: string;
+  price?: string | number;
+  createdAt?: any;
 }
 
-// Datos de prueba basados exactamente en la captura
-const mockTrips: Trip[] = [
-  {
-    id: '1',
-    status: 'COMPLETADO',
-    driverId: 'undefined',
-    passengerName: 'Pasajero',
-    coordinates: '21.1390, -86.8349',
-    address: 'Instituto Tecnológico Superior de Felipe Carrillo Puerto, Calle Diagonal 63, Felipe Carrillo Puerto, Quintana Roo, 77200, México',
-    time: '19:26',
-    price: '$ $$42'
-  },
-  {
-    id: '2',
-    status: 'COMPLETADO',
-    driverId: 'undefined',
-    passengerName: 'Pasajero',
-    coordinates: '21.1390, -86.8349',
-    address: 'Instituto Tecnológico Superior de Felipe Carrillo Puerto, Calle Diagonal 63, Felipe Carrillo Puerto, Quintana Roo, 77200, México',
-    time: '19:21',
-    price: '$ $$165'
-  },
-  {
-    id: '3',
-    status: 'COMPLETADO',
-    driverId: 'undefined',
-    passengerName: 'Pasajero',
-    coordinates: '21.1326, -86.9225',
-    address: 'tecnm',
-    time: '11:33',
-    price: '$ $$176'
-  },
-  {
-    id: '4',
-    status: 'CANCELADO',
-    driverId: 'undefined',
-    passengerName: 'Pasajero',
-    coordinates: '21.1327, -86.9223',
-    address: 'tecnm',
-    time: '10:22',
-    price: '$ $$159'
-  }
-];
-
 export default function Trips() {
+  const { user, userData } = useAuth();
   const [activeTab, setActiveTab] = useState<string>('Todos');
   const [searchQuery, setSearchQuery] = useState('');
+  const [trips, setTrips] = useState<Trip[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const tabs = ['Todos', 'Solicitados', 'En Progreso', 'Completados', 'Cancelados'];
 
-  // Filtrar viajes según el tab activo
-  const filteredTrips = mockTrips.filter(trip => {
-    if (activeTab === 'Todos') return true;
-    if (activeTab === 'Solicitados') return trip.status === 'SOLICITADO';
-    if (activeTab === 'En Progreso') return trip.status === 'EN_PROGRESO';
-    if (activeTab === 'Completados') return trip.status === 'COMPLETADO';
-    if (activeTab === 'Cancelados') return trip.status === 'CANCELADO';
-    return true;
+  useEffect(() => {
+    const fetchTrips = async () => {
+      setLoading(true);
+      try {
+        let fetchedTrips = [];
+        if (userData?.role === 'driver') {
+          fetchedTrips = await getDriverTrips();
+        } else {
+          fetchedTrips = await getUserTrips();
+        }
+        
+        // Mapear los datos de Firebase a nuestra interfaz
+        const formattedTrips = fetchedTrips.map((t: any) => ({
+          id: t.id,
+          status: t.status ? t.status.toUpperCase() : 'SOLICITADO',
+          driverId: t.driverId || 'Buscando...',
+          passengerName: t.passengerName || 'Pasajero',
+          origin: t.origin || 'Origen no especificado',
+          destination: t.destination || 'Destino no especificado',
+          time: t.time || (t.createdAt ? new Date(t.createdAt.toDate()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'N/A'),
+          price: t.price ? `$${t.price}` : 'Pendiente'
+        }));
+        
+        setTrips(formattedTrips);
+      } catch (error) {
+        console.error("Error fetching trips:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (user) {
+      fetchTrips();
+    }
+  }, [user, userData]);
+
+  // Filtrar viajes según el tab activo y la búsqueda
+  const filteredTrips = trips.filter(trip => {
+    const matchesTab = 
+      activeTab === 'Todos' ? true :
+      activeTab === 'Solicitados' ? trip.status === 'SOLICITADO' || trip.status === 'REQUESTED' :
+      activeTab === 'En Progreso' ? trip.status === 'EN_PROGRESO' || trip.status === 'IN_PROGRESS' :
+      activeTab === 'Completados' ? trip.status === 'COMPLETADO' || trip.status === 'COMPLETED' :
+      activeTab === 'Cancelados' ? trip.status === 'CANCELADO' || trip.status === 'CANCELLED' : true;
+      
+    const matchesSearch = 
+      (trip.origin?.toLowerCase().includes(searchQuery.toLowerCase()) || false) ||
+      (trip.destination?.toLowerCase().includes(searchQuery.toLowerCase()) || false) ||
+      (trip.passengerName?.toLowerCase().includes(searchQuery.toLowerCase()) || false);
+      
+    return matchesTab && matchesSearch;
   });
 
   // Calcular estadísticas
-  const totalTrips = mockTrips.length;
-  const activeTripsCount = mockTrips.filter(t => t.status === 'EN_PROGRESO' || t.status === 'SOLICITADO').length;
-  const completedTripsCount = mockTrips.filter(t => t.status === 'COMPLETADO').length;
+  const totalTrips = trips.length;
+  const activeTripsCount = trips.filter(t => ['EN_PROGRESO', 'IN_PROGRESS', 'SOLICITADO', 'REQUESTED'].includes(t.status)).length;
+  const completedTripsCount = trips.filter(t => ['COMPLETADO', 'COMPLETED'].includes(t.status)).length;
 
   return (
     <div className="min-h-screen bg-[#f0f2f5] dark:bg-zinc-900 text-[#2d3748] dark:text-zinc-100 pb-24 font-sans transition-colors duration-200">
@@ -186,11 +191,11 @@ export default function Trips() {
               <div className="flex flex-col gap-1.5 md:w-5/12 text-[12px] text-[#718096] dark:text-zinc-400">
                 <div className="flex items-start gap-2">
                   <MapPin size={14} className="text-[#00d4aa] mt-0.5 shrink-0" />
-                  <span>{trip.coordinates}</span>
+                  <span className="line-clamp-2">{trip.origin}</span>
                 </div>
                 <div className="flex items-start gap-2">
                   <Flag size={14} className="text-[#00d4aa] mt-0.5 shrink-0" />
-                  <span className="line-clamp-2">{trip.address}</span>
+                  <span className="line-clamp-2">{trip.destination}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Clock size={14} className="text-[#00d4aa] shrink-0" />

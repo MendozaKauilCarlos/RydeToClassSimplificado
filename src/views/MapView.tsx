@@ -133,6 +133,7 @@ export default function MapView() {
             zoom={15} 
             scrollWheelZoom={true} 
             className="w-full h-full z-0"
+            style={{ height: '100%', width: '100%' }}
             zoomControl={false} // Ocultamos el control de zoom por defecto para que se vea más limpio como en la captura
           >
             <TileLayer

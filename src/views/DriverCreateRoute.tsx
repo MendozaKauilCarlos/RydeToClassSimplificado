@@ -1,6 +1,44 @@
 import React, { useState } from 'react';
-import { ArrowLeft, MapPin, Navigation, Clock, Users, DollarSign, Map, Plus, Target } from 'lucide-react';
+import { ArrowLeft, MapPin, Navigation, Clock, Users, DollarSign, Map as MapIcon, Plus, Target } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+
+// Fix for default marker icons in React-Leaflet
+// @ts-ignore
+import icon from 'leaflet/dist/images/marker-icon.png';
+// @ts-ignore
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+
+let DefaultIcon = L.icon({
+  iconUrl: icon,
+  shadowUrl: iconShadow,
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  tooltipAnchor: [16, -28],
+  shadowSize: [41, 41]
+});
+
+L.Marker.prototype.options.icon = DefaultIcon;
+
+// Custom markers
+const originIcon = L.divIcon({
+  className: 'custom-div-icon',
+  html: `<div style="background-color: #00d4aa; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
+  iconSize: [16, 16],
+  iconAnchor: [8, 8],
+  popupAnchor: [0, -10]
+});
+
+const destIcon = L.divIcon({
+  className: 'custom-div-icon',
+  html: `<div style="background-color: #e74c3c; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
+  iconSize: [16, 16],
+  iconAnchor: [8, 8],
+  popupAnchor: [0, -10]
+});
 
 interface RouteData {
   id: string;
@@ -27,6 +65,10 @@ export default function DriverCreateRoute() {
   
   // Routes State
   const [myRoutes, setMyRoutes] = useState<RouteData[]>([]);
+
+  // Map state (Mock coordinates for Cancun)
+  const originCoords: [number, number] = [21.1390, -86.8350];
+  const destCoords: [number, number] = [21.1619, -86.8515];
 
   const toggleDay = (day: string) => {
     if (days.includes(day)) {
@@ -82,6 +124,34 @@ export default function DriverCreateRoute() {
         <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 p-5 md:p-8 mb-8 transition-colors duration-200">
           <form onSubmit={handleCreateRoute} className="space-y-6">
             
+            {/* Mapa de previsualización */}
+            <div className="w-full h-48 rounded-xl overflow-hidden border border-gray-200 dark:border-zinc-700 relative z-0">
+              <MapContainer 
+                center={[21.1500, -86.8430]} 
+                zoom={13} 
+                scrollWheelZoom={false} 
+                className="w-full h-full"
+                style={{ height: '100%', width: '100%' }}
+                zoomControl={false}
+              >
+                <TileLayer
+                  attribution='&copy; OpenStreetMap'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  className="dark:brightness-75 dark:contrast-125 dark:hue-rotate-180 dark:invert"
+                />
+                <Marker position={originCoords} icon={originIcon}>
+                  <Popup>Origen</Popup>
+                </Marker>
+                <Marker position={destCoords} icon={destIcon}>
+                  <Popup>Destino</Popup>
+                </Marker>
+                <Polyline positions={[originCoords, destCoords]} color="#00d4aa" weight={4} dashArray="5, 10" />
+              </MapContainer>
+              <div className="absolute top-2 left-2 z-[400] bg-white/90 dark:bg-zinc-800/90 backdrop-blur-sm px-3 py-1.5 rounded-lg shadow-sm text-[11px] font-bold text-[#2d3748] dark:text-zinc-100 border border-gray-100 dark:border-zinc-700">
+                Previsualización de Ruta
+              </div>
+            </div>
+
             {/* Nombre de la ruta */}
             <div>
               <label className="flex items-center gap-2 text-[11px] font-bold text-[#00d4aa] mb-2 uppercase tracking-wider">
@@ -211,7 +281,7 @@ export default function DriverCreateRoute() {
           
           {myRoutes.length === 0 ? (
             <div className="flex flex-col items-center justify-center text-center opacity-60 py-10">
-              <Map size={56} className="text-[#a0aec0] dark:text-zinc-500 mb-4" />
+              <MapIcon size={56} className="text-[#a0aec0] dark:text-zinc-500 mb-4" />
               <p className="text-[#718096] dark:text-zinc-400 font-medium text-[14px]">No has creado ninguna ruta</p>
             </div>
           ) : (
