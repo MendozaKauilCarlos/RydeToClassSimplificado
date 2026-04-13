@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { User, Bell, Menu, MapPin, Route as RouteIcon, Target, Play } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import 'leaflet-routing-machine';
 
 // Fix for default marker icons in React-Leaflet
 // @ts-ignore
@@ -31,6 +32,49 @@ const customGreenIcon = L.divIcon({
   popupAnchor: [0, -10]
 });
 
+// Component to handle routing
+function Routing({ origin, destination }: { origin: [number, number] | null, destination: [number, number] | null }) {
+  const map = useMap();
+  const routingControlRef = useRef<L.Routing.Control | null>(null);
+
+  useEffect(() => {
+    if (!map || !origin || !destination) return;
+
+    if (routingControlRef.current) {
+      map.removeControl(routingControlRef.current);
+    }
+
+    const waypoints = [
+      L.latLng(origin[0], origin[1]),
+      L.latLng(destination[0], destination[1])
+    ];
+
+    const routingControl = L.Routing.control({
+      waypoints,
+      routeWhileDragging: false,
+      showAlternatives: false,
+      fitSelectedRoutes: true,
+      show: false, // Hide the text instructions panel
+      lineOptions: {
+        styles: [{ color: '#00d4aa', opacity: 0.8, weight: 6 }],
+        extendToWaypoints: true,
+        missingRouteTolerance: 0
+      },
+      createMarker: () => null // We'll use our own markers if needed
+    }).addTo(map);
+
+    routingControlRef.current = routingControl;
+
+    return () => {
+      if (routingControlRef.current && map) {
+        map.removeControl(routingControlRef.current);
+      }
+    };
+  }, [map, origin, destination]);
+
+  return null;
+}
+
 // Component to recenter map when location changes
 function RecenterAutomatically({ lat, lng }: { lat: number, lng: number }) {
   const map = useMap();
@@ -43,7 +87,9 @@ function RecenterAutomatically({ lat, lng }: { lat: number, lng: number }) {
 export default function MapView() {
   // Default coordinates from the screenshot (Cancun)
   const [position, setPosition] = useState<[number, number]>([21.1390, -86.8350]);
+  const [destination, setDestination] = useState<[number, number] | null>(null);
   const [isLocating, setIsLocating] = useState(false);
+  const [isRouting, setIsRouting] = useState(false);
 
   // Function to get real user location
   const handleLocateMe = () => {
@@ -65,6 +111,12 @@ export default function MapView() {
       alert("Geolocalización no soportada en este navegador.");
       setIsLocating(false);
     }
+  };
+
+  const handleStartTrip = () => {
+    // Ejemplo de destino simulado (Tecnológico de Cancún)
+    setDestination([21.1326, -86.9225]);
+    setIsRouting(true);
   };
 
   return (
@@ -112,7 +164,7 @@ export default function MapView() {
             <div className="bg-white dark:bg-zinc-800 rounded-xl px-4 py-3 shadow-md flex items-center gap-3 pointer-events-auto border border-gray-100 dark:border-zinc-700 transition-colors duration-200">
               <RouteIcon className="text-[#00d4aa] shrink-0" size={18} />
               <span className="text-[14px] text-[#2d3748] dark:text-zinc-100 font-medium">
-                Sin ruta activa
+                {isRouting ? "En ruta hacia el destino" : "Sin ruta activa"}
               </span>
             </div>
 
@@ -146,14 +198,25 @@ export default function MapView() {
                 <div className="font-bold text-[#2d3748] text-center px-2 py-1">Tu ubicación</div>
               </Popup>
             </Marker>
+            {destination && (
+              <Marker position={destination} icon={customGreenIcon}>
+                <Popup className="custom-popup">
+                  <div className="font-bold text-[#2d3748] text-center px-2 py-1">Destino</div>
+                </Popup>
+              </Marker>
+            )}
+            <Routing origin={position} destination={destination} />
             <RecenterAutomatically lat={position[0]} lng={position[1]} />
           </MapContainer>
         </div>
 
         {/* Botón Iniciar Viaje */}
-        <button className="w-full mt-6 bg-[#00d4aa] hover:bg-[#00bfa0] text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 text-[16px] shadow-md shadow-[#00d4aa]/20 transition-colors">
+        <button 
+          onClick={handleStartTrip}
+          className="w-full mt-6 bg-[#00d4aa] hover:bg-[#00bfa0] text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 text-[16px] shadow-md shadow-[#00d4aa]/20 transition-colors"
+        >
           <Play size={20} className="fill-white" />
-          Iniciar Viaje
+          {isRouting ? "Actualizar Ruta" : "Iniciar Viaje de Prueba"}
         </button>
 
       </main>

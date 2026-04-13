@@ -32,6 +32,45 @@ export default function Trips() {
     const fetchTrips = async () => {
       setLoading(true);
       try {
+        // Si es el usuario de demostración, mostrar datos falsos
+        if (user?.uid === 'demo-user-123') {
+          const mockTrips: Trip[] = [
+            {
+              id: '1',
+              status: 'COMPLETADO',
+              driverId: 'Conductor Prueba',
+              passengerName: 'Usuario Demo',
+              origin: 'Instituto Tecnológico Superior',
+              destination: 'Centro',
+              time: '19:26',
+              price: '$42'
+            },
+            {
+              id: '2',
+              status: 'EN_PROGRESO',
+              driverId: 'Conductor Prueba',
+              passengerName: 'Usuario Demo',
+              origin: 'Plaza Las Américas',
+              destination: 'Universidad Tecnológica',
+              time: '14:30',
+              price: '$80'
+            },
+            {
+              id: '3',
+              status: 'CANCELADO',
+              driverId: 'Buscando...',
+              passengerName: 'Usuario Demo',
+              origin: 'Terminal ADO',
+              destination: 'Zona Hotelera Km 9',
+              time: '10:22',
+              price: '$159'
+            }
+          ];
+          setTrips(mockTrips);
+          setLoading(false);
+          return;
+        }
+
         let fetchedTrips = [];
         if (userData?.role === 'driver') {
           fetchedTrips = await getDriverTrips();
