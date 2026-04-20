@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Bell, Menu, MapPin, Route as RouteIcon, Target, Play } from 'lucide-react';
+import { User, Bell, Menu, MapPin, Route as RouteIcon, Target, Play, CarFront } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -27,6 +27,15 @@ L.Marker.prototype.options.icon = DefaultIcon;
 const customGreenIcon = L.divIcon({
   className: 'custom-div-icon',
   html: `<div style="background-color: #00d4aa; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
+  iconSize: [16, 16],
+  iconAnchor: [8, 8],
+  popupAnchor: [0, -10]
+});
+
+// Custom red marker for destination
+const customRedIcon = L.divIcon({
+  className: 'custom-div-icon',
+  html: `<div style="background-color: #e74c3c; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
   iconSize: [16, 16],
   iconAnchor: [8, 8],
   popupAnchor: [0, -10]
@@ -199,25 +208,50 @@ export default function MapView() {
               </Popup>
             </Marker>
             {destination && (
-              <Marker position={destination} icon={customGreenIcon}>
+              <Marker position={destination} icon={customRedIcon}>
                 <Popup className="custom-popup">
-                  <div className="font-bold text-[#2d3748] text-center px-2 py-1">Destino</div>
+                  <div className="font-bold text-[#2d3748] text-center px-2 py-1">Punto de Destino</div>
                 </Popup>
               </Marker>
             )}
             <Routing origin={position} destination={destination} />
             <RecenterAutomatically lat={position[0]} lng={position[1]} />
           </MapContainer>
-        </div>
 
-        {/* Botón Iniciar Viaje */}
-        <button 
-          onClick={handleStartTrip}
-          className="w-full mt-6 bg-[#00d4aa] hover:bg-[#00bfa0] text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 text-[16px] shadow-md shadow-[#00d4aa]/20 transition-colors"
-        >
-          <Play size={20} className="fill-white" />
-          {isRouting ? "Actualizar Ruta" : "Iniciar Viaje de Prueba"}
-        </button>
+          {/* Floating UI at the bottom of the map when tracking */}
+          {isRouting ? (
+            <div className="absolute bottom-6 left-4 right-4 z-[400] bg-white dark:bg-zinc-900 rounded-2xl shadow-xl p-4 border border-gray-100 dark:border-zinc-700">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-12 h-12 bg-gray-100 dark:bg-zinc-800 rounded-full flex items-center justify-center shrink-0">
+                  <CarFront size={24} className="text-[#00d4aa]" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-bold text-[#2d3748] dark:text-zinc-100 uppercase tracking-wide text-sm">UBERX • NISSAN SENTRA</h3>
+                  <p className="text-sm text-[#718096] dark:text-zinc-400 font-medium">Conductor Demo • 4.9 ★</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-bold text-[#00d4aa] text-lg">12 min</p>
+                  <p className="text-xs text-[#718096] dark:text-zinc-500 font-medium">4.2 km</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => { setDestination(null); setIsRouting(false); }}
+                className="w-full bg-red-50 hover:bg-red-100 dark:bg-red-500/10 dark:hover:bg-red-500/20 text-red-600 dark:text-red-500 font-bold py-3.5 rounded-xl transition-colors text-sm"
+              >
+                Cancelar Viaje
+              </button>
+            </div>
+          ) : (
+            <button 
+              onClick={handleStartTrip}
+              className="absolute bottom-6 left-4 right-4 z-[400] bg-[#00d4aa] hover:bg-[#00bfa0] text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 text-[16px] shadow-lg shadow-[#00d4aa]/30 transition-colors"
+            >
+              <Play size={20} className="fill-white" />
+              Iniciar Viaje de Prueba
+            </button>
+          )}
+
+        </div>
 
       </main>
     </div>
