@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { ArrowLeft, Camera, User, Mail, Phone, Car, Hash } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -8,7 +8,10 @@ export default function EditProfile() {
   const { userData } = useAuth();
   const isDriver = userData?.role === 'driver';
   
-  // Estados para el formulario (con datos de ejemplo basados en el perfil)
+  // Reference for the hidden file input
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // States for the form
   const [formData, setFormData] = useState({
     name: userData?.displayName || 'PAKO',
     email: userData?.email || 'pakodilla3@gmail.com',
@@ -17,14 +20,44 @@ export default function EditProfile() {
     plates: 'ABC-123-D'
   });
 
+  // State for the selected profile image file (ready for backend upload)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  // State for the preview URL to show the image instantly in the UI
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setSelectedFile(file);
+      
+      // Create a local URL for the preview image
+      const previewUrl = URL.createObjectURL(file);
+      setImagePreview(previewUrl);
+    }
+  };
+
+  const handleTriggerFileInput = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Aquí iría la lógica para guardar en el backend
+    
+    // TODO: [Backend] Implement profile update logic here.
+    // 1. Update text fields in standard user document based on `formData`.
+    // 2. If `selectedFile` is not null, upload it to Firebase Storage (or other service).
+    // 3. Get the uploaded image URL and attach it to the user's document.
+    
+    console.log("Datos a guardar:", formData);
+    console.log("Archivo a subir:", selectedFile);
+
     alert('¡Perfil actualizado con éxito!');
     navigate('/profile');
   };
@@ -50,15 +83,29 @@ export default function EditProfile() {
           {/* Foto de Perfil */}
           <div className="flex flex-col items-center mt-4 mb-8">
             <div className="relative">
-              <div className="w-28 h-28 bg-[#00d4aa] rounded-full flex items-center justify-center text-white shadow-md shadow-[#00d4aa]/20">
-                <User size={56} />
+              <div className="w-28 h-28 bg-[#00d4aa] rounded-full flex items-center justify-center text-white shadow-md shadow-[#00d4aa]/20 overflow-hidden">
+                {imagePreview ? (
+                  <img src={imagePreview} alt="Vista previa" className="w-full h-full object-cover" />
+                ) : (
+                  <User size={56} />
+                )}
               </div>
               <button 
                 type="button"
-                className="absolute bottom-0 right-0 bg-white dark:bg-zinc-800 p-2.5 rounded-full shadow-lg border border-gray-100 dark:border-zinc-700 text-[#4a5568] dark:text-zinc-300 hover:text-[#00d4aa] dark:hover:text-[#00d4aa] transition-colors"
+                onClick={handleTriggerFileInput}
+                className="absolute bottom-0 right-0 bg-white dark:bg-zinc-800 p-2.5 rounded-full shadow-lg border border-gray-100 dark:border-zinc-700 text-[#4a5568] dark:text-zinc-300 hover:text-[#00d4aa] dark:hover:text-[#00d4aa] transition-colors z-10 cursor-pointer"
               >
                 <Camera size={20} />
               </button>
+              
+              {/* Hidden file input */}
+              <input 
+                type="file" 
+                accept="image/*" 
+                ref={fileInputRef} 
+                onChange={handleImageChange} 
+                className="hidden" 
+              />
             </div>
             <span className="text-[13px] text-[#718096] dark:text-zinc-400 mt-3 font-medium">Toca para cambiar la foto</span>
           </div>
