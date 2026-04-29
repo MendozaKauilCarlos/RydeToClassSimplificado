@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { ArrowLeft, Camera, User, Mail, Phone, Car, Hash } from 'lucide-react';
+import { ArrowLeft, Camera, User, Mail, Phone, Car, Hash, Palette, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -17,7 +17,9 @@ export default function EditProfile() {
     email: userData?.email || 'pakodilla3@gmail.com',
     phone: '+52 998 123 4567',
     vehicle: 'Nissan Versa 2022',
-    plates: 'ABC-123-D'
+    plates: 'ABC-123-D',
+    color: 'Plata',
+    capacity: '4'
   });
 
   // State for the selected profile image file (ready for backend upload)
@@ -216,6 +218,48 @@ export default function EditProfile() {
                     onChange={handleChange}
                     className="w-full pl-10 pr-4 py-3 bg-[#f8fafc] dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-[15px] font-medium text-[#2d3748] dark:text-zinc-100 uppercase focus:outline-none focus:border-[#00d4aa] focus:ring-1 focus:ring-[#00d4aa] transition-all"
                     placeholder="ABC-123-D"
+                  />
+                </div>
+              </div>
+
+              {/* Color */}
+              <div>
+                <label className="block text-[12px] font-bold text-[#718096] dark:text-zinc-400 uppercase tracking-wider mb-2">
+                  Color del Vehículo
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Palette size={18} className="text-[#a0aec0] dark:text-zinc-500" />
+                  </div>
+                  <input
+                    type="text"
+                    name="color"
+                    value={formData.color}
+                    onChange={handleChange}
+                    className="w-full pl-10 pr-4 py-3 bg-[#f8fafc] dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-[15px] font-medium text-[#2d3748] dark:text-zinc-100 focus:outline-none focus:border-[#00d4aa] focus:ring-1 focus:ring-[#00d4aa] transition-all"
+                    placeholder="Ej. Plata, Blanco, Rojo"
+                  />
+                </div>
+              </div>
+
+              {/* Capacidad */}
+              <div>
+                <label className="block text-[12px] font-bold text-[#718096] dark:text-zinc-400 uppercase tracking-wider mb-2">
+                  Capacidad (Pasajeros)
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Users size={18} className="text-[#a0aec0] dark:text-zinc-500" />
+                  </div>
+                  <input
+                    type="number"
+                    name="capacity"
+                    min="1"
+                    max="6"
+                    value={formData.capacity}
+                    onChange={handleChange}
+                    className="w-full pl-10 pr-4 py-3 bg-[#f8fafc] dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl text-[15px] font-medium text-[#2d3748] dark:text-zinc-100 focus:outline-none focus:border-[#00d4aa] focus:ring-1 focus:ring-[#00d4aa] transition-all"
+                    placeholder="Ej. 4"
                   />
                 </div>
               </div>
