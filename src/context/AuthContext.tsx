@@ -15,6 +15,7 @@ interface UserData {
   color?: string;
   capacity?: string;
   name?: string; // added to support both displayName and name
+  isOnline?: boolean;
 }
 
 interface AuthContextType {

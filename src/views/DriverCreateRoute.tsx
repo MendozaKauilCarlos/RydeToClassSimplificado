@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, MapPin, Navigation, Clock, Users, DollarSign, Map as MapIcon, Plus, Target, Loader2 } from 'lucide-react';
+import { ArrowLeft, MapPin, Navigation, Clock, Users, DollarSign, Map as MapIcon, Plus, Target, Loader2, Power, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useAuth } from '../context/AuthContext';
-import { createRoute, getDriverRoutes } from '../services/db';
+import { createRoute, getDriverRoutes, deleteRoute, toggleRouteActive } from '../services/db';
 
 // Fix for default marker icons in React-Leaflet
 // @ts-ignore
@@ -51,6 +51,7 @@ interface RouteData {
   days: string[];
   seats: number;
   price: number;
+  active?: boolean;
 }
 
 export default function DriverCreateRoute() {
@@ -70,6 +71,8 @@ export default function DriverCreateRoute() {
   const [myRoutes, setMyRoutes] = useState<RouteData[]>([]);
   const [loadingRoutes, setLoadingRoutes] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deactivatingRouteId, setDeactivatingRouteId] = useState<string | null>(null);
+  const [deletingRouteId, setDeletingRouteId] = useState<string | null>(null);
 
   // Load driver routes from Firestore
   useEffect(() => {
@@ -86,7 +89,8 @@ export default function DriverCreateRoute() {
           time: r.time || '',
           days: r.days || [],
           seats: r.seats || 4,
-          price: r.price ? Number(r.price) : 0
+          price: r.price ? Number(r.price) : 0,
+          active: r.active !== false
         }));
         setMyRoutes(mapped);
       } catch (error) {
@@ -147,7 +151,8 @@ export default function DriverCreateRoute() {
         time,
         days,
         seats,
-        price: Number(price)
+        price: Number(price),
+        active: true
       };
 
       setMyRoutes([newRoute, ...myRoutes]);
@@ -169,6 +174,29 @@ export default function DriverCreateRoute() {
     }
   };
 
+  const handleToggleActive = async (routeId: string, currentActive: boolean) => {
+    const nextState = !currentActive;
+    try {
+      await toggleRouteActive(routeId, nextState);
+      setMyRoutes(prev => prev.map(r => r.id === routeId ? { ...r, active: nextState } : r));
+      setDeactivatingRouteId(null);
+    } catch (error) {
+      console.error('Error al cambiar estado de la ruta:', error);
+      alert('Hubo un error al cambiar el estado de la ruta.');
+    }
+  };
+
+  const handleDelete = async (routeId: string) => {
+    try {
+      await deleteRoute(routeId);
+      setMyRoutes(prev => prev.filter(r => r.id !== routeId));
+      setDeletingRouteId(null);
+    } catch (error) {
+      console.error('Error al eliminar la ruta:', error);
+      alert('Hubo un error al eliminar la ruta.');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#f0f2f5] dark:bg-zinc-900 pb-24 font-sans text-[#2d3748] dark:text-zinc-100 transition-colors duration-200">
       {/* Header */}
@@ -185,32 +213,21 @@ export default function DriverCreateRoute() {
         <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 p-5 md:p-8 mb-8 transition-colors duration-200">
           <form onSubmit={handleCreateRoute} className="space-y-6">
             
-            {/* Mapa de previsualización */}
-            <div className="w-full h-48 rounded-xl overflow-hidden border border-gray-200 dark:border-zinc-700 relative z-0">
-              <MapContainer 
-                center={[21.1500, -86.8430]} 
-                zoom={13} 
-                scrollWheelZoom={false} 
-                className="w-full h-full"
-                style={{ height: '100%', width: '100%' }}
-                zoomControl={false}
-              >
-                <TileLayer
-                  attribution='&copy; OpenStreetMap'
-                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  className="dark:brightness-75 dark:contrast-125 dark:hue-rotate-180 dark:invert"
-                />
-                <Marker position={originCoords} icon={originIcon}>
-                  <Popup>Origen</Popup>
-                </Marker>
-                <Marker position={destCoords} icon={destIcon}>
-                  <Popup>Destino</Popup>
-                </Marker>
-                <Polyline positions={[originCoords, destCoords]} color="#00d4aa" weight={4} dashArray="5, 10" />
-              </MapContainer>
-              <div className="absolute top-2 left-2 z-[400] bg-white/90 dark:bg-zinc-800/90 backdrop-blur-sm px-3 py-1.5 rounded-lg shadow-sm text-[11px] font-bold text-[#2d3748] dark:text-zinc-100 border border-gray-100 dark:border-zinc-700">
-                Previsualización de Ruta
-              </div>
+            {/* Mapa de previsualización - Oculto temporalmente */}
+            <div className="w-full bg-gradient-to-r from-[#00d4aa]/5 to-emerald-500/5 dark:from-zinc-800 dark:to-zinc-800/80 rounded-xl p-6 border border-dashed border-gray-300 dark:border-zinc-700 flex flex-col justify-center items-center text-center">
+              <MapIcon size={32} className="text-[#00d4aa] mb-2 shrink-0" />
+              <p className="text-xs font-black text-[#2d3748] dark:text-zinc-100 uppercase tracking-widest">Trayecto Escolar Estimado</p>
+              <p className="text-[12px] text-[#718096] dark:text-zinc-400 mt-1.5 max-w-[400px]">
+                {origin || destination ? (
+                  <span className="font-medium">
+                    <span className="text-[#00d4aa] font-bold">{origin || 'Origen no especificado'}</span>
+                    <span className="mx-2">➔</span>
+                    <span className="text-rose-500 font-bold">{destination || 'Destino no especificado'}</span>
+                  </span>
+                ) : (
+                  'Ingresa el punto de origen y llegada para trazar la ruta del campus.'
+                )}
+              </p>
             </div>
 
             {/* Nombre de la ruta */}
@@ -368,7 +385,16 @@ export default function DriverCreateRoute() {
               {myRoutes.map((route) => (
                 <div key={route.id} className="bg-white dark:bg-zinc-800 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-zinc-700 transition-colors duration-200">
                   <div className="flex justify-between items-start mb-3">
-                    <h3 className="font-bold text-[#2d3748] dark:text-zinc-100 text-[16px]">{route.name}</h3>
+                    <div>
+                      <h3 className="font-bold text-[#2d3748] dark:text-zinc-100 text-[16px]">{route.name}</h3>
+                      <span className={`inline-block mt-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold tracking-wide uppercase ${
+                        route.active !== false 
+                          ? 'bg-[#00d4aa]/10 text-[#00d4aa]' 
+                          : 'bg-rose-500/10 text-rose-500 dark:bg-rose-500/20'
+                      }`}>
+                        {route.active !== false ? 'Activa' : 'Completada / Inactiva'}
+                      </span>
+                    </div>
                     <span className="text-[#00d4aa] font-bold text-[18px]">${route.price}</span>
                   </div>
                   
@@ -395,6 +421,65 @@ export default function DriverCreateRoute() {
                         </span>
                       ))}
                     </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-3 mt-4 pt-3 border-t border-gray-100 dark:border-zinc-700">
+                    {deactivatingRouteId === route.id ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-amber-600 dark:text-amber-400 font-bold mr-1">
+                          ¿{route.active !== false ? 'Desactivar' : 'Activar'} de inmediato?
+                        </span>
+                        <button
+                          onClick={() => handleToggleActive(route.id, route.active !== false)}
+                          className="bg-amber-500 hover:bg-amber-600 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm"
+                        >
+                          Sí, cambiar
+                        </button>
+                        <button
+                          onClick={() => setDeactivatingRouteId(null)}
+                          className="bg-gray-100 hover:bg-gray-200 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-[#4a5568] dark:text-zinc-200 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border border-gray-200/50 dark:border-zinc-600"
+                        >
+                          No
+                        </button>
+                      </div>
+                    ) : deletingRouteId === route.id ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-rose-500 font-bold mr-1">¿Eliminar permanentemente?</span>
+                        <button
+                          onClick={() => handleDelete(route.id)}
+                          className="bg-rose-500 hover:bg-rose-600 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm"
+                        >
+                          Sí, eliminar
+                        </button>
+                        <button
+                          onClick={() => setDeletingRouteId(null)}
+                          className="bg-gray-100 hover:bg-gray-200 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-[#4a5568] dark:text-zinc-200 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border border-gray-200/50 dark:border-zinc-600"
+                        >
+                          No
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => setDeactivatingRouteId(route.id)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                            route.active !== false
+                              ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400'
+                              : 'bg-[#00d4aa]/10 hover:bg-[#00d4aa]/20 text-[#00d4aa]'
+                          }`}
+                        >
+                          <Power size={14} className="shrink-0" />
+                          {route.active !== false ? 'Desactivar / Cancelar' : 'Activar Ruta'}
+                        </button>
+                        <button
+                          onClick={() => setDeletingRouteId(route.id)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 transition-all flex items-center gap-1.5"
+                        >
+                          <Trash2 size={14} className="shrink-0" />
+                          Eliminar
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}

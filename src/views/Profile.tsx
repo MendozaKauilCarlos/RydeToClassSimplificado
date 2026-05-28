@@ -1,13 +1,28 @@
 import React, { useState } from 'react';
-import { User, Bell, Menu, Edit, Settings, Download, HelpCircle, LogOut, ChevronRight, ToggleLeft, ToggleRight, Users } from 'lucide-react';
+import { User, Bell, Menu, Edit, Settings, LogOut, ChevronRight, ToggleLeft, ToggleRight, Users } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { deactivateDriverRoutes } from '../services/db';
 
 export default function Profile() {
-  const { logout, userData } = useAuth();
+  const { logout, userData, updateProfile, user } = useAuth();
   const navigate = useNavigate();
   const isDriver = userData?.role === 'driver';
-  const [isOnline, setIsOnline] = useState(false);
+  const isOnline = userData?.isOnline || false;
+
+  const handleToggleOnline = async () => {
+    try {
+      const nextOnline = !isOnline;
+      await updateProfile({ isOnline: nextOnline });
+      
+      // Si pasa a estar NO CONECTADO ("no conectado para recibir"), desactivar sus rutas activas automáticamente
+      if (!nextOnline && user?.uid) {
+        await deactivateDriverRoutes(user.uid);
+      }
+    } catch (error) {
+      console.error('Error actualizando estado de conexión:', error);
+    }
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -60,18 +75,12 @@ export default function Profile() {
           <p className="text-[14px] text-[#718096] dark:text-zinc-400 mb-8">{userData?.email || ''}</p>
           
           {/* Estadísticas */}
-          <div className="flex gap-16 text-center">
+          <div className="flex justify-center text-center">
             <div className="flex flex-col items-center">
               <span className="text-[24px] font-bold text-[#2d3748] dark:text-zinc-100 leading-none mb-1.5">
                 {userData && typeof userData.trips !== 'undefined' ? userData.trips : 0}
               </span>
               <span className="text-[10px] text-[#a0aec0] dark:text-zinc-500 uppercase tracking-wider font-bold">VIAJES</span>
-            </div>
-            <div className="flex flex-col items-center">
-              <span className="text-[24px] font-bold text-[#2d3748] dark:text-zinc-100 leading-none mb-1.5">
-                {userData && typeof userData.rating !== 'undefined' ? Number(userData.rating).toFixed(1) : '5.0'}
-              </span>
-              <span className="text-[10px] text-[#a0aec0] dark:text-zinc-500 uppercase tracking-wider font-bold">RATING</span>
             </div>
           </div>
         </div>
@@ -82,7 +91,7 @@ export default function Profile() {
           {/* Botón Conectarse (Solo Conductor) */}
           {isDriver && (
             <button 
-              onClick={() => setIsOnline(!isOnline)}
+              onClick={handleToggleOnline}
               className={`w-full p-5 rounded-xl flex items-center justify-between transition-colors shadow-sm mb-2 ${isOnline ? 'bg-[#00d4aa] hover:bg-[#00bfa0] text-white' : 'bg-white dark:bg-zinc-800 border border-gray-100 dark:border-zinc-700 hover:bg-gray-50 dark:hover:bg-zinc-700'}`}
             >
               <div className="flex items-center gap-4">
@@ -137,27 +146,7 @@ export default function Profile() {
             <ChevronRight size={20} className="text-[#a0aec0] dark:text-zinc-500" />
           </button>
 
-          <button 
-            onClick={() => alert('Función de descarga próximamente')}
-            className="w-full bg-white dark:bg-zinc-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-zinc-700 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-zinc-700 transition-colors"
-          >
-            <div className="flex items-center gap-4">
-              <Download size={20} className="text-[#00d4aa]" />
-              <span className="text-[#2d3748] dark:text-zinc-100 font-medium text-[15px]">Descargar APK</span>
-            </div>
-            <ChevronRight size={20} className="text-[#a0aec0] dark:text-zinc-500" />
-          </button>
 
-          <button 
-            onClick={() => alert('Sección de ayuda próximamente')}
-            className="w-full bg-white dark:bg-zinc-800 rounded-xl p-4 shadow-sm border border-gray-100 dark:border-zinc-700 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-zinc-700 transition-colors"
-          >
-            <div className="flex items-center gap-4">
-              <HelpCircle size={20} className="text-[#00d4aa]" />
-              <span className="text-[#2d3748] dark:text-zinc-100 font-medium text-[15px]">Ayuda</span>
-            </div>
-            <ChevronRight size={20} className="text-[#a0aec0] dark:text-zinc-500" />
-          </button>
 
           <button 
             onClick={handleLogout}

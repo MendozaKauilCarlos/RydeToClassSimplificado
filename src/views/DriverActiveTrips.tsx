@@ -153,104 +153,90 @@ export default function DriverActiveTrips() {
         <h1 className="text-[18px] font-bold text-[#2d3748] dark:text-zinc-100">Viaje Activo</h1>
       </header>
 
-      <main className="flex-1 flex flex-col relative">
+      <main className="flex-1 max-w-xl mx-auto w-full p-4 flex flex-col justify-center">
         
-        {/* Mapa */}
-        <div className="absolute inset-0 z-0">
-          <MapContainer 
-            center={isPickingUp ? passengerCoords : destCoords} 
-            zoom={14} 
-            scrollWheelZoom={true} 
-            className="w-full h-full"
-            style={{ height: '100%', width: '100%' }}
-            zoomControl={false}
-          >
-            <TileLayer
-              attribution='&copy; OpenStreetMap'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              className="dark:brightness-75 dark:contrast-125 dark:hue-rotate-180 dark:invert"
-            />
-            <Marker position={driverCoords} icon={driverIcon}>
-              <Popup>Tu ubicación</Popup>
-            </Marker>
-            
-            {isPickingUp && (
-              <>
-                <Marker position={passengerCoords} icon={passengerIcon}>
-                  <Popup>Pasajero: {activeTrip.passengerName || 'Pasajero'}</Popup>
-                </Marker>
-                <Polyline positions={[driverCoords, passengerCoords]} color="#3b82f6" weight={5} dashArray="5, 10" />
-              </>
-            )}
-
-            {!isPickingUp && (
-              <>
-                <Marker position={destCoords} icon={destIcon}>
-                  <Popup>Destino Final: {activeTrip.destination}</Popup>
-                </Marker>
-                <Polyline positions={[driverCoords, destCoords]} color="#00d4aa" weight={5} />
-              </>
-            )}
-          </MapContainer>
-        </div>
-
-        {/* Panel Inferior Flotante */}
-        <div className="absolute bottom-4 left-4 right-4 z-10 w-auto">
-          <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-xl border border-gray-100 dark:border-zinc-700 p-5 transition-colors duration-200 max-w-[800px] mx-auto">
-            
-            {/* Info del Pasajero */}
-            <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-100 dark:border-zinc-700">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-lg">
-                  {(activeTrip.passengerName || 'P')[0].toUpperCase()}
-                </div>
-                <div>
-                  <h3 className="font-bold text-[#2d3748] dark:text-zinc-100 text-[16px]">{activeTrip.passengerName || 'Pasajero'}</h3>
-                  <p className="text-[12px] text-[#718096] dark:text-zinc-400 flex items-center gap-1">
-                    <CheckCircle size={12} className="text-[#00d4aa]" /> Pasajero verificado
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button className="w-10 h-10 rounded-full bg-gray-100 dark:bg-zinc-700 flex items-center justify-center text-[#4a5568] dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-600 transition-colors">
-                  <MessageCircle size={20} />
-                </button>
-                <button className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors">
-                  <Phone size={20} />
-                </button>
-              </div>
-            </div>
-
-            {/* Detalles de la ruta */}
-            <div className="space-y-3 mb-6">
-              <div className="flex items-center gap-3 text-[14px]">
-                <MapPin size={18} className={isPickingUp ? "text-[#3b82f6]" : "text-[#00d4aa]"} />
-                <div>
-                  <p className="text-[11px] font-bold text-[#718096] dark:text-zinc-400 uppercase tracking-wider">
-                    {isPickingUp ? 'Punto de recogida' : 'Destino final'}
-                  </p>
-                  <p className="font-medium text-[#2d3748] dark:text-zinc-100">
-                    {isPickingUp ? activeTrip.origin : activeTrip.destination}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Botón de Acción */}
-            <button 
-              onClick={handleNextStep}
-              className={`w-full py-4 rounded-xl font-bold text-white shadow-md transition-colors flex items-center justify-center gap-2 text-[15px] ${
+        {/* Visual Progress Stepper replacing the Map */}
+        <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 p-6 mb-4 transition-colors duration-200">
+          <p className="text-[11px] font-extrabold text-[#00d4aa] uppercase tracking-wider mb-4">Progreso de la Ruta</p>
+          <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-gray-100 dark:before:bg-zinc-700">
+            {/* Step 1: Recogida */}
+            <div className="relative">
+              <span className={`absolute left-[-22px] top-1 w-4.5 h-4.5 rounded-full border-2 flex items-center justify-center text-[10px] font-bold ${
                 isPickingUp 
-                  ? 'bg-[#3b82f6] hover:bg-blue-600 shadow-blue-500/20' 
-                  : 'bg-[#00d4aa] hover:bg-[#00bfa0] shadow-[#00d4aa]/20'
-              }`}
-            >
-              {isPickingUp ? 'CONFIRMAR RECOGIDA' : 'FINALIZAR VIAJE'}
-            </button>
-
+                  ? 'bg-blue-500 border-white text-white shadow-sm' 
+                  : 'bg-[#00d4aa] border-white text-white'
+              }`}>
+                1
+              </span>
+              <p className={`text-xs font-bold ${isPickingUp ? 'text-blue-500' : 'text-gray-400'}`}>Punto de Recogida</p>
+              <p className="text-[14px] font-medium text-[#2d3748] dark:text-zinc-100">{activeTrip.origin}</p>
+            </div>
+            
+            {/* Step 2: Destino */}
+            <div className="relative">
+              <span className={`absolute left-[-22px] top-1 w-4.5 h-4.5 rounded-full border-2 flex items-center justify-center text-[10px] font-bold ${
+                !isPickingUp 
+                  ? 'bg-[#00d4aa] border-white text-white shadow-sm' 
+                  : 'bg-gray-100 dark:bg-zinc-800 border-gray-300 text-gray-400'
+              }`}>
+                2
+              </span>
+              <p className={`text-xs font-bold ${!isPickingUp ? 'text-[#00d4aa]' : 'text-gray-400'}`}>Destino Final</p>
+              <p className="text-[14px] font-medium text-[#2d3748] dark:text-zinc-100">{activeTrip.destination}</p>
+            </div>
           </div>
         </div>
 
+        {/* Detalles del Pasajero */}
+        <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 p-6 transition-colors duration-200">
+          
+          {/* Info del Pasajero */}
+          <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-100 dark:border-zinc-700">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-lg">
+                {(activeTrip.passengerName || 'P')[0].toUpperCase()}
+              </div>
+              <div>
+                <h3 className="font-bold text-[#2d3748] dark:text-zinc-100 text-[16px]">{activeTrip.passengerName || 'Pasajero'}</h3>
+                <p className="text-[12px] text-[#718096] dark:text-zinc-400 flex items-center gap-1">
+                  <CheckCircle size={12} className="text-[#00d4aa]" /> Pasajero de la Institución
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button className="w-10 h-10 rounded-full bg-gray-100 dark:bg-zinc-700 flex items-center justify-center text-[#4a5568] dark:text-zinc-300 hover:bg-gray-200 dark:hover:bg-zinc-600 transition-colors">
+                <MessageCircle size={20} />
+              </button>
+              <button className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors">
+                <Phone size={20} />
+              </button>
+            </div>
+          </div>
+
+          <div className="mb-6">
+            <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-1">Estado de la Ruta</p>
+            <span className={`inline-block px-3 py-1 rounded-full text-[11px] font-extrabold tracking-wide uppercase ${
+              isPickingUp 
+                ? 'bg-blue-500/10 text-blue-500' 
+                : 'bg-[#00d4aa]/10 text-[#00d4aa]'
+            }`}>
+              {isPickingUp ? 'YENDO POR EL PASAJERO' : 'DE CAMINO AL DESTINO'}
+            </span>
+          </div>
+
+          {/* Botón de Acción */}
+          <button 
+            onClick={handleNextStep}
+            className={`w-full py-4 rounded-xl font-bold text-white shadow-md transition-colors flex items-center justify-center gap-2 text-[15px] ${
+              isPickingUp 
+                ? 'bg-[#3b82f6] hover:bg-blue-600 shadow-blue-500/20' 
+                : 'bg-[#00d4aa] hover:bg-[#00bfa0] shadow-[#00d4aa]/20'
+            }`}
+          >
+            {isPickingUp ? 'CONFIRMAR RECOGIDA' : 'FINALIZAR VIAJE'}
+          </button>
+
+        </div>
       </main>
     </div>
   );

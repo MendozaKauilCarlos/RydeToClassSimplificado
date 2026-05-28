@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, BellOff, MapPin, Navigation, Clock, Check, X } from 'lucide-react';
+import { ArrowLeft, BellOff, MapPin, Navigation, Clock, Check, X, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { updateTripStatus } from '../services/db';
+import { updateTripStatus, deactivateDriverRoutes } from '../services/db';
 import { useAuth } from '../context/AuthContext';
 
 interface RequestData {
@@ -17,47 +17,111 @@ interface RequestData {
   type?: 'personalizado' | 'programado' | 'rapido';
   date?: string | null;
   scheduledTime?: string | null;
+  passengers?: number;
 }
 
 export default function DriverRequests() {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const [isOnline, setIsOnline] = useState(true);
+  const { user, userData, updateProfile } = useAuth();
+  const isOnline = userData?.isOnline || false;
   const [requests, setRequests] = useState<RequestData[]>([]);
 
+  const handleToggleOnline = async () => {
+    try {
+      const nextOnline = !isOnline;
+      await updateProfile({ isOnline: nextOnline });
+      
+      // Si pasa a estar NO CONECTADO, desactivar sus rutas activas
+      if (!nextOnline && user?.uid) {
+        await deactivateDriverRoutes(user.uid);
+      }
+    } catch (error) {
+      console.error('Error al actualizar conexión:', error);
+    }
+  };
+
   useEffect(() => {
-    if (!isOnline) {
+    if (!isOnline || !user?.uid) {
       setRequests([]);
       return;
     }
 
-    // Escuchar viajes solicitados en tiempo real
-    const q = query(collection(db, 'trips'), where('status', '==', 'requested'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const newRequests = snapshot.docs.map(doc => {
+    let publicRequests: RequestData[] = [];
+    let customBookings: RequestData[] = [];
+
+    const updateCombinedRequests = () => {
+      const combined = [...customBookings, ...publicRequests];
+      setRequests(combined);
+    };
+
+    // 1. Escuchar solicitudes públicas generales (status == 'requested')
+    const qPublic = query(collection(db, 'trips'), where('status', '==', 'requested'));
+    const unsubscribePublic = onSnapshot(qPublic, (snapshot) => {
+      publicRequests = snapshot.docs.map(doc => {
         const data = doc.data();
         return {
           id: doc.id,
           passengerName: data.passengerName || 'Pasajero',
           origin: data.origin || 'Origen no especificado',
           destination: data.destination || 'Destino no especificado',
-          distance: 'Calculando...', // Esto se puede mejorar con la API de mapas
+          distance: 'General',
           time: data.createdAt ? new Date(data.createdAt.toDate()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Reciente',
           price: data.price || 45,
           type: data.type || 'personalizado',
           date: data.date || null,
-          scheduledTime: data.time || null
+          scheduledTime: data.time || null,
+          passengers: data.passengers || 1
         };
       });
-      setRequests(newRequests);
+      updateCombinedRequests();
     });
 
-    return () => unsubscribe();
-  }, [isOnline]);
+    // 2. Escuchar solicitudes directas reservadas (status == 'pending' y driverId == user.uid)
+    const qCustom = query(
+      collection(db, 'trips'), 
+      where('status', '==', 'pending'),
+      where('driverId', '==', user.uid)
+    );
+    const unsubscribeCustom = onSnapshot(qCustom, (snapshot) => {
+      customBookings = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          passengerName: data.passengerName || 'Pasajero',
+          origin: data.origin || 'Origen no especificado',
+          destination: data.destination || 'Destino no especificado',
+          distance: 'Reserva Directa',
+          time: data.createdAt ? new Date(data.createdAt.toDate()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Reciente',
+          price: data.price || 45,
+          type: data.type || 'rapido',
+          date: data.date || null,
+          scheduledTime: data.time || null,
+          passengers: data.passengers || 1
+        };
+      });
+      updateCombinedRequests();
+    });
+
+    return () => {
+      unsubscribePublic();
+      unsubscribeCustom();
+    };
+  }, [isOnline, user?.uid]);
 
   const handleAccept = async (id: string) => {
+    if (!isOnline) {
+      alert('Debes estar conectado para poder aceptar solicitudes.');
+      return;
+    }
     try {
-      await updateTripStatus(id, 'in_progress', { driverId: user?.uid || 'Conductor' });
+      await updateTripStatus(id, 'in_progress', { 
+        driverId: user?.uid || 'Conductor',
+        driverName: userData?.name || userData?.displayName || 'Conductor',
+        driverPhotoURL: userData?.photoURL || null,
+        driverRating: userData?.rating || 5.0,
+        vehicle: userData?.vehicle || 'Vehículo',
+        car: userData?.vehicle || 'Vehículo'
+      });
       alert('¡Viaje aceptado! Redirigiendo al mapa...');
       navigate('/driver/active');
     } catch (error) {
@@ -67,9 +131,14 @@ export default function DriverRequests() {
   };
 
   const handleReject = async (id: string) => {
-    // En un sistema real, no lo cancelaríamos para todos, solo lo ocultaríamos para este conductor.
-    // Por ahora, solo lo quitamos de la vista localmente o lo marcamos como rechazado.
-    setRequests(requests.filter(r => r.id !== id));
+    try {
+      await updateTripStatus(id, 'CANCELADO');
+      setRequests(requests.filter(r => r.id !== id));
+      alert('Viaje rechazado con éxito.');
+    } catch (error) {
+      console.error('Error al rechazar viaje:', error);
+      alert('Hubo un error al rechazar el viaje.');
+    }
   };
 
   return (
@@ -85,7 +154,7 @@ export default function DriverRequests() {
       <main className="p-4 md:p-8 max-w-[800px] mx-auto">
         {/* Estado de conexión */}
         <button 
-          onClick={() => setIsOnline(!isOnline)}
+          onClick={handleToggleOnline}
           className={`w-full rounded-xl p-4 flex items-center justify-center gap-2 text-white font-bold mb-8 shadow-sm transition-colors ${
             isOnline ? 'bg-[#00d4aa] hover:bg-[#00bfa0]' : 'bg-gray-400 dark:bg-zinc-600 hover:bg-gray-500'
           }`}
@@ -130,6 +199,9 @@ export default function DriverRequests() {
                           Personalizado
                         </span>
                       )}
+                      <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border border-amber-500/20 flex items-center gap-1 shrink-0">
+                        <Users size={12} className="shrink-0 text-amber-500" /> {request.passengers || 1} {request.passengers === 1 ? 'pasajero' : 'pasajeros'}
+                      </span>
                     </div>
                     
                     {request.type === 'programado' && (request.date || request.scheduledTime) ? (

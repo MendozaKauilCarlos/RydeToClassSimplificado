@@ -357,49 +357,6 @@ export default function Home() {
             </div>
 
             {/* Travel Stats Summary */}
-            <div className="mt-8">
-              <div className="flex justify-between items-center mb-4 px-1">
-                <h2 className="text-[18px] font-bold text-[#2d3748] dark:text-zinc-100">Mi Historial</h2>
-                <button onClick={() => navigate('/trips')} className="text-[#00d4aa] text-[13px] font-medium hover:underline">Ver viajes</button>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Completed Trips Counter */}
-                <div className="bg-white dark:bg-zinc-800 p-5 rounded-xl shadow-sm flex items-center gap-4 border border-gray-100/50 dark:border-zinc-800">
-                  <div className="w-12 h-12 bg-[#00d4aa] rounded-xl flex items-center justify-center text-white shrink-0">
-                    <Route size={24} />
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="font-bold text-3xl text-[#2d3748] dark:text-zinc-100">{userData?.tripsCompleted || 0}</span>
-                    <span className="text-[10px] text-[#718096] dark:text-zinc-400 uppercase font-bold leading-tight max-w-[80px]">Viajes Completados</span>
-                  </div>
-                </div>
-                
-                {/* Rating (Drivers Only) */}
-                {isDriver && (
-                  <div className="bg-white dark:bg-zinc-800 p-4 rounded-xl shadow-sm flex items-center gap-4 border border-gray-100/50 dark:border-zinc-800">
-                    <div className="w-12 h-12 bg-[#00d4aa] rounded-xl flex items-center justify-center text-white shrink-0">
-                      <Star size={24} className="fill-white" />
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="font-bold text-3xl text-[#2d3748] dark:text-zinc-100">{userData?.rating || '5.0'}</span>
-                      <span className="text-[10px] text-[#718096] dark:text-zinc-400 uppercase font-bold leading-tight max-w-[80px]">Calificación</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Saved Time Indicator */}
-                <div className="bg-white dark:bg-zinc-800 p-5 rounded-xl shadow-sm flex items-center gap-4 border border-gray-100/50 dark:border-zinc-800">
-                  <div className="w-12 h-12 bg-[#00d4aa] rounded-xl flex items-center justify-center text-white shrink-0">
-                    <Clock size={24} className="fill-white" />
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="font-bold text-3xl text-[#2d3748] dark:text-zinc-100">{userData?.timeSaved || '0h'}</span>
-                    <span className="text-[10px] text-[#718096] dark:text-zinc-400 uppercase font-bold leading-tight max-w-[80px]">Tiempo Ahorrado</span>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         )}
 

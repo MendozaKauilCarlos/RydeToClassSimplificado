@@ -6,6 +6,7 @@ import {
   getDocs, 
   addDoc, 
   updateDoc, 
+  deleteDoc,
   query, 
   where, 
   orderBy, 
@@ -118,7 +119,7 @@ export async function createTrip(tripData: any) {
       ...tripData,
       userId: user.uid,
       passengerId: user.uid,
-      status: 'requested',
+      status: tripData.status || 'requested',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp()
     });
@@ -137,15 +138,20 @@ export async function getUserTrips(userId: string | null = null) {
     
     const q = query(
       collection(db, 'trips'), 
-      where('passengerId', '==', uid),
-      orderBy('createdAt', 'desc')
+      where('passengerId', '==', uid)
     );
     const snapshot = await getDocs(q);
     
-    return snapshot.docs.map(doc => ({
+    const trips = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
+    trips.sort((a: any, b: any) => {
+      const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : (a.createdAt ? new Date(a.createdAt) : new Date(0));
+      const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : (b.createdAt ? new Date(b.createdAt) : new Date(0));
+      return dateB.getTime() - dateA.getTime();
+    });
+    return trips;
   } catch (error) {
     console.error('Error obteniendo viajes:', error);
     throw error;
@@ -159,15 +165,20 @@ export async function getDriverTrips(driverId: string | null = null) {
     
     const q = query(
       collection(db, 'trips'), 
-      where('driverId', '==', uid),
-      orderBy('createdAt', 'desc')
+      where('driverId', '==', uid)
     );
     const snapshot = await getDocs(q);
     
-    return snapshot.docs.map(doc => ({
+    const trips = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
+    trips.sort((a: any, b: any) => {
+      const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : (a.createdAt ? new Date(a.createdAt) : new Date(0));
+      const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : (b.createdAt ? new Date(b.createdAt) : new Date(0));
+      return dateB.getTime() - dateA.getTime();
+    });
+    return trips;
   } catch (error) {
     console.error('Error obteniendo viajes del conductor:', error);
     throw error;
@@ -182,6 +193,24 @@ export async function updateTripStatus(tripId: string, status: string, additiona
       ...additionalData,
       updatedAt: serverTimestamp()
     });
+
+    // Desactivar la ruta si el viaje se completa o se cancela
+    const lowerStatus = status.toLowerCase();
+    if (lowerStatus === 'completed' || lowerStatus === 'completado' || lowerStatus === 'cancelado') {
+      const tripSnap = await getDoc(tripRef);
+      if (tripSnap.exists()) {
+        const tripData = tripSnap.data();
+        if (tripData?.routeId) {
+          const routeRef = doc(db, 'routes', tripData.routeId);
+          await updateDoc(routeRef, {
+            active: false,
+            updatedAt: serverTimestamp()
+          });
+          console.log(`Ruta ${tripData.routeId} desactivada correctamente.`);
+        }
+      }
+    }
+    
     return true;
   } catch (error) {
     console.error('Error actualizando estado del viaje:', error);
@@ -218,17 +247,69 @@ export async function getDriverRoutes(driverId: string | null = null) {
     
     const q = query(
       collection(db, 'routes'), 
-      where('driverId', '==', uid),
-      orderBy('createdAt', 'desc')
+      where('driverId', '==', uid)
     );
     const snapshot = await getDocs(q);
     
-    return snapshot.docs.map(doc => ({
+    const routes = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     }));
+    routes.sort((a: any, b: any) => {
+      const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : (a.createdAt ? new Date(a.createdAt) : new Date(0));
+      const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : (b.createdAt ? new Date(b.createdAt) : new Date(0));
+      return dateB.getTime() - dateA.getTime();
+    });
+    return routes;
   } catch (error) {
     console.error('Error obteniendo rutas:', error);
+    throw error;
+  }
+}
+
+export async function deleteRoute(routeId: string) {
+  try {
+    const routeRef = doc(db, 'routes', routeId);
+    await deleteDoc(routeRef);
+    return true;
+  } catch (error) {
+    console.error('Error eliminando ruta:', error);
+    throw error;
+  }
+}
+
+export async function toggleRouteActive(routeId: string, active: boolean) {
+  try {
+    const routeRef = doc(db, 'routes', routeId);
+    await updateDoc(routeRef, {
+      active,
+      updatedAt: serverTimestamp()
+    });
+    return true;
+  } catch (error) {
+    console.error('Error modificando estado de la ruta:', error);
+    throw error;
+  }
+}
+
+export async function deactivateDriverRoutes(driverId: string) {
+  try {
+    const q = query(
+      collection(db, 'routes'),
+      where('driverId', '==', driverId),
+      where('active', '==', true)
+    );
+    const snapshot = await getDocs(q);
+    const batchPromises = snapshot.docs.map(async (docSnap) => {
+      await updateDoc(docSnap.ref, {
+        active: false,
+        updatedAt: serverTimestamp()
+      });
+    });
+    await Promise.all(batchPromises);
+    return true;
+  } catch (error) {
+    console.error('Error auto-deactivating driver routes:', error);
     throw error;
   }
 }
@@ -238,15 +319,38 @@ export async function searchRoutes(origin: any, destination: any, date: any) {
     const q = query(
       collection(db, 'routes'), 
       where('active', '==', true)
-      // Nota: En Firestore, las consultas geoespaciales complejas requieren Geohashes o herramientas como GeoFirestore.
-      // Por ahora, traemos las rutas activas y filtramos en el cliente si es necesario.
     );
     const snapshot = await getDocs(q);
     
-    return snapshot.docs.map(doc => ({
+    const rawRoutes = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
-    }));
+    })) as any[];
+
+    const activeRoutes: any[] = [];
+    
+    for (const route of rawRoutes) {
+      if (route.driverId) {
+        const driverDocRef = doc(db, 'users', route.driverId);
+        const driverDocSnap = await getDoc(driverDocRef);
+        if (driverDocSnap.exists()) {
+          const driverData = driverDocSnap.data();
+          // Solo conservamos la ruta si el conductor está marcado como conectado (isOnline === true)
+          if (driverData?.isOnline === true) {
+            activeRoutes.push({
+              ...route,
+              driverName: driverData.name || driverData.displayName || route.driverName || 'Conductor',
+              driverPhotoURL: driverData.photoURL || route.driverPhotoURL,
+              driverRating: driverData.rating || route.driverRating || 5.0,
+              vehicle: driverData.vehicle || route.vehicle || route.car || 'Vehículo',
+              car: driverData.vehicle || route.car || route.vehicle || 'Vehículo'
+            });
+          }
+        }
+      }
+    }
+
+    return activeRoutes;
   } catch (error) {
     console.error('Error buscando rutas:', error);
     throw error;

@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Search, User, MapPin, Flag, Clock, Bell, Menu } from 'lucide-react';
+import { Search, User, MapPin, Flag, Clock, Bell, Menu, XCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { getUserTrips, getDriverTrips } from '../services/db';
+import { updateTripStatus } from '../services/db';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '../services/firebase';
 
 // Tipos de estado de viaje
 type TripStatus = 'COMPLETADO' | 'CANCELADO' | 'SOLICITADO' | 'EN_PROGRESO' | string;
@@ -11,6 +13,7 @@ interface Trip {
   id: string;
   status: TripStatus;
   driverId?: string;
+  driverName?: string;
   passengerName?: string;
   origin?: string;
   destination?: string;
@@ -19,60 +22,88 @@ interface Trip {
   createdAt?: any;
 }
 
+const mapStatusLabel = (status: string) => {
+  const s = status.toUpperCase();
+  if (s === 'PENDING' || s === 'REQUESTED' || s === 'SOLICITADO') return 'SOLICITADO';
+  if (s === 'IN_PROGRESS' || s === 'EN_PROGRESO' || s === 'PICKING_UP' || s === 'IN_TRANSIT') return 'EN MARCHA';
+  if (s === 'COMPLETED' || s === 'COMPLETADO') return 'COMPLETADO';
+  if (s === 'CANCELLED' || s === 'CANCELADO' || s === 'RECHAZADO') return 'RECHAZADO / CANCELADO';
+  return s;
+};
+
+const getStatusBadgeColor = (status: string) => {
+  const lbl = mapStatusLabel(status);
+  if (lbl === 'RECHAZADO / CANCELADO') return 'bg-rose-500';
+  if (lbl === 'EN MARCHA') return 'bg-sky-500';
+  if (lbl === 'COMPLETADO') return 'bg-[#00d4aa]';
+  return 'bg-amber-500'; // Solicitado
+};
+
 export default function Trips() {
   const { user, userData } = useAuth();
   const [activeTab, setActiveTab] = useState<string>('Todos');
   const [searchQuery, setSearchQuery] = useState('');
   const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cancellingTripId, setCancellingTripId] = useState<string | null>(null);
+
+  const handleCancelTrip = async (tripId: string) => {
+    try {
+      await updateTripStatus(tripId, 'CANCELADO');
+      setCancellingTripId(null);
+    } catch (error) {
+      console.error("Error cancelling trip:", error);
+    }
+  };
 
   const tabs = ['Todos', 'Solicitados', 'En Progreso', 'Completados', 'Cancelados'];
 
   useEffect(() => {
-    const fetchTrips = async () => {
-      setLoading(true);
-      try {
-        let fetchedTrips = [];
-        if (userData?.role === 'driver') {
-          fetchedTrips = await getDriverTrips();
-        } else {
-          fetchedTrips = await getUserTrips();
-        }
-        
-        // Mapear los datos de Firebase a nuestra interfaz
-        const formattedTrips = fetchedTrips.map((t: any) => ({
-          id: t.id,
-          status: t.status ? t.status.toUpperCase() : 'SOLICITADO',
+    if (!user || !userData) return;
+
+    setLoading(true);
+    const isDriver = userData.role === 'driver';
+
+    const q = query(
+      collection(db, 'trips'), 
+      where(isDriver ? 'driverId' : 'passengerId', '==', user.uid)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const formattedTrips = snapshot.docs.map((docSnap) => {
+        const t = docSnap.data();
+        return {
+          id: docSnap.id,
+          status: t.status ? t.status : 'SOLICITADO',
           driverId: t.driverId || 'Buscando...',
-          driverName: t.driverName || (t.driverId ? 'Conductor Asignado' : 'Por asignar'),
+          driverName: t.driverName || (t.driverId ? (t.driverId === 'Conductor' ? 'Conductor' : 'Conductor Asignado') : 'Por asignar'),
           passengerName: t.passengerName || 'Pasajero',
           origin: t.origin || 'Origen no especificado',
           destination: t.destination || 'Destino no especificado',
           time: t.time || (t.createdAt ? new Date(t.createdAt.toDate()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'N/A'),
           price: t.price ? `$${t.price}` : 'Pendiente'
-        }));
-        
-        setTrips(formattedTrips);
-      } catch (error) {
-        console.error("Error fetching trips:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
+        };
+      });
+      
+      setTrips(formattedTrips);
+      setLoading(false);
+    }, (error) => {
+      console.error("Error listening to real-time trips:", error);
+      setLoading(false);
+    });
 
-    if (user) {
-      fetchTrips();
-    }
+    return () => unsubscribe();
   }, [user, userData]);
 
   // Filtrar viajes según el tab activo y la búsqueda
   const filteredTrips = trips.filter(trip => {
+    const lbl = mapStatusLabel(trip.status);
     const matchesTab = 
       activeTab === 'Todos' ? true :
-      activeTab === 'Solicitados' ? trip.status === 'SOLICITADO' || trip.status === 'REQUESTED' :
-      activeTab === 'En Progreso' ? trip.status === 'EN_PROGRESO' || trip.status === 'IN_PROGRESS' :
-      activeTab === 'Completados' ? trip.status === 'COMPLETADO' || trip.status === 'COMPLETED' :
-      activeTab === 'Cancelados' ? trip.status === 'CANCELADO' || trip.status === 'CANCELLED' : true;
+      activeTab === 'Solicitados' ? lbl === 'SOLICITADO' :
+      activeTab === 'En Progreso' ? lbl === 'EN MARCHA' :
+      activeTab === 'Completados' ? lbl === 'COMPLETADO' :
+      activeTab === 'Cancelados' ? lbl === 'RECHAZADO / CANCELADO' : true;
       
     const matchesSearch = 
       (trip.origin?.toLowerCase().includes(searchQuery.toLowerCase()) || false) ||
@@ -84,8 +115,11 @@ export default function Trips() {
 
   // Calcular estadísticas
   const totalTrips = trips.length;
-  const activeTripsCount = trips.filter(t => ['EN_PROGRESO', 'IN_PROGRESS', 'SOLICITADO', 'REQUESTED'].includes(t.status)).length;
-  const completedTripsCount = trips.filter(t => ['COMPLETADO', 'COMPLETED'].includes(t.status)).length;
+  const activeTripsCount = trips.filter(t => {
+    const lbl = mapStatusLabel(t.status);
+    return ['SOLICITADO', 'EN MARCHA'].includes(lbl);
+  }).length;
+  const completedTripsCount = trips.filter(t => mapStatusLabel(t.status) === 'COMPLETADO').length;
 
   return (
     <div className="min-h-screen bg-[#f0f2f5] dark:bg-zinc-900 text-[#2d3748] dark:text-zinc-100 pb-24 font-sans transition-colors duration-200">
@@ -173,24 +207,20 @@ export default function Trips() {
             <div key={trip.id} className="bg-white dark:bg-zinc-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-zinc-700 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors duration-200">
               
               {/* Sección Izquierda: Botón conductor y Estado */}
-              <div className="flex items-center gap-4 md:w-1/3">
-                <div className={`px-4 py-1.5 rounded-full flex items-center gap-2 text-white text-[12px] font-bold ${
-                  trip.status === 'CANCELADO' ? 'bg-[#f59e0b]' : 'bg-[#00d4aa]'
-                }`}>
-                  <User size={14} />
-                  <span>{userData?.role === 'driver' ? 'Conductor' : (trip as any).driverName}</span>
+              <div className="flex items-center gap-4 md:w-1/3 text-ellipsis overflow-hidden">
+                <div className="px-4 py-1.5 rounded-full flex items-center gap-2 text-white text-[12px] font-bold bg-[#00d4aa] truncate">
+                  <User size={14} className="shrink-0" />
+                  <span className="truncate">{userData?.role === 'driver' ? 'Conductor' : (trip as any).driverName}</span>
                 </div>
                 
-                <div className={`px-4 py-1.5 rounded-full text-white text-[11px] font-bold tracking-wider ${
-                  trip.status === 'CANCELADO' ? 'bg-[#f59e0b]' : 'bg-[#00d4aa]'
-                }`}>
-                  {trip.status}
+                <div className={`px-4 py-1.5 rounded-full text-white text-[10px] font-extrabold tracking-wider shrink-0 shadow-sm ${getStatusBadgeColor(trip.status)}`}>
+                  {mapStatusLabel(trip.status)}
                 </div>
               </div>
 
               {/* Sección Centro: Pasajero */}
               <div className="flex items-center gap-2 md:w-1/4">
-                <User size={18} className="text-[#2d3748] dark:text-zinc-100 fill-[#2d3748] dark:fill-zinc-100" />
+                <User size={18} className="text-[#2d3748] dark:text-zinc-100 fill-[#2d3748] dark:fill-zinc-100 shadow-sm" />
                 <span className="font-bold text-[#2d3748] dark:text-zinc-100 text-[15px]">{trip.passengerName}</span>
               </div>
 
@@ -211,6 +241,36 @@ export default function Trips() {
                 <div className="font-bold text-[#00d4aa] text-[14px] mt-1">
                   {trip.price}
                 </div>
+              </div>
+
+              {/* Botón de Cancelación */}
+              <div className="flex items-center justify-end md:w-1/6 shrink-0">
+                {['SOLICITADO', 'EN MARCHA'].includes(mapStatusLabel(trip.status)) && (
+                  cancellingTripId === trip.id ? (
+                    <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+                      <button
+                        onClick={() => handleCancelTrip(trip.id)}
+                        className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg text-[11px] transition-colors shadow-sm cursor-pointer whitespace-nowrap"
+                      >
+                        Sí, cancelar
+                      </button>
+                      <button
+                        onClick={() => setCancellingTripId(null)}
+                        className="px-3 py-1.5 bg-gray-100 dark:bg-zinc-700 text-gray-700 dark:text-zinc-200 hover:bg-gray-200 dark:hover:bg-zinc-600 font-bold rounded-lg text-[11px] transition-colors cursor-pointer whitespace-nowrap"
+                      >
+                        No
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setCancellingTripId(trip.id)}
+                      className="w-full md:w-auto px-4 py-2 bg-rose-50/50 dark:bg-rose-950/10 hover:bg-rose-100 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400 font-bold rounded-lg text-xs transition-colors border border-rose-200 dark:border-rose-900/30 cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      <XCircle size={14} />
+                      <span>Cancelar</span>
+                    </button>
+                  )
+                )}
               </div>
 
             </div>
