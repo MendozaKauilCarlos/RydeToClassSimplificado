@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft, MapPin, Navigation, Calendar, Clock, Users, Zap, CalendarDays, User, Star } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { createTrip } from '../services/db';
+import { createTrip, searchRoutes } from '../services/db';
 import { useAuth } from '../context/AuthContext';
 
 export default function PassengerRequestTrip() {
@@ -17,11 +17,65 @@ export default function PassengerRequestTrip() {
   const [time, setTime] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Mock drivers for "Rápido" tab
-  const mockDrivers = [
-    { id: 1, name: 'Carlos Mendoza', rating: 4.9, car: 'Honda Civic', price: 25, origin: 'Universidad Nacional', destination: 'Centro Comercial', time: '08:00', seats: 2 },
-    { id: 2, name: 'Ana García', rating: 4.8, car: 'Toyota Corolla', price: 30, origin: 'Estación Metro', destination: 'Campus Norte', time: '07:30', seats: 1 }
-  ];
+  // Live active routes/drivers from DB for "Rápido" tab
+  const [drivers, setDrivers] = useState<any[]>([]);
+  const [loadingDrivers, setLoadingDrivers] = useState(false);
+
+  useEffect(() => {
+    const fetchActiveDrivers = async () => {
+      setLoadingDrivers(true);
+      try {
+        const routes = await searchRoutes(null, null, null);
+        const mapped = (routes || []).map((r: any) => ({
+          id: r.id,
+          driverId: r.driverId || null,
+          photoURL: r.driverPhotoURL || r.photoURL || null,
+          name: r.driverName || r.name || 'Conductor',
+          rating: r.driverRating || 5.0,
+          car: r.vehicle || r.car || 'Vehículo',
+          price: r.price || 15,
+          origin: r.origin || '',
+          destination: r.destination || '',
+          time: r.time || '00:00',
+          seats: r.seats || 4
+        }));
+        setDrivers(mapped);
+      } catch (error) {
+        console.error('Error fetching active routes:', error);
+      } finally {
+        setLoadingDrivers(false);
+      }
+    };
+    if (activeTab === 'rapido') {
+      fetchActiveDrivers();
+    }
+  }, [activeTab]);
+
+  const handleSelectQuickRoute = async (driver: any) => {
+    setIsSubmitting(true);
+    try {
+      await createTrip({
+        type: 'rapido',
+        origin: driver.origin,
+        destination: driver.destination,
+        passengers: 1,
+        driverId: driver.driverId,
+        driverName: driver.name,
+        price: driver.price,
+        time: driver.time,
+        routeId: driver.id,
+        passengerName: user?.displayName || 'Pasajero',
+        status: 'pending' // pending approval
+      });
+      alert('¡Viaje reservado con éxito! Revisa la sección de Viajes Activos para ver el trayecto.');
+      navigate('/trips');
+    } catch (error) {
+      console.error('Error reserving trip from route:', error);
+      alert('Hubo un error al reservar el viaje.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleRequestTrip = async () => {
     if (!origin || !destination) {
@@ -186,12 +240,31 @@ export default function PassengerRequestTrip() {
           {/* Tab Content: Rápido */}
           {activeTab === 'rapido' && (
             <div className="space-y-4">
-              {mockDrivers.map(driver => (
-                <div key={driver.id} className="bg-gray-50 dark:bg-zinc-900 rounded-2xl p-5 border border-gray-100 dark:border-zinc-700 transition-colors duration-200">
+              {loadingDrivers && (
+                <div className="text-center py-6 text-[#718096] dark:text-zinc-400">
+                  <div className="w-6 h-6 border-2 border-[#00d4aa] rounded-full border-t-transparent animate-spin mx-auto mb-2"></div>
+                  Buscando rutas activas...
+                </div>
+              )}
+              
+              {!loadingDrivers && drivers.length === 0 && (
+                <div className="bg-gray-50 dark:bg-zinc-900 rounded-2xl p-8 text-center border border-gray-100 dark:border-zinc-700">
+                  <User size={48} className="mx-auto text-[#a0aec0] dark:text-zinc-500 mb-3 opacity-50" />
+                  <p className="font-bold text-[#4a5568] dark:text-zinc-300">No hay conductores activos</p>
+                  <p className="text-[12px] text-[#718096] dark:text-zinc-400 mt-1">Crea una ruta desde una cuenta de conductor para verla reflejada aquí.</p>
+                </div>
+              )}
+
+              {!loadingDrivers && drivers.map(driver => (
+                <div key={driver.id} className="bg-gray-50 dark:bg-zinc-900 rounded-2xl p-5 border border-gray-100 dark:border-zinc-700 transition-[#f0f2f5] duration-200">
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-[#00d4aa] rounded-full flex items-center justify-center text-white font-bold">
-                        <User size={24} />
+                      <div className="w-12 h-12 bg-[#00d4aa] rounded-full flex items-center justify-center text-white font-bold overflow-hidden shrink-0 shadow-sm border border-gray-100">
+                        {driver.photoURL ? (
+                          <img src={driver.photoURL} alt={driver.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        ) : (
+                          <User size={24} />
+                        )}
                       </div>
                       <div>
                         <h3 className="font-bold text-[#2d3748] dark:text-zinc-100 text-[16px]">{driver.name}</h3>
@@ -214,7 +287,7 @@ export default function PassengerRequestTrip() {
                     </div>
                   </div>
                   
-                  <div className="flex items-center justify-between text-[12px] font-medium">
+                  <div className="flex items-center justify-between text-[12px] font-medium mb-4">
                     <span className="flex items-center gap-1.5 text-[#718096] dark:text-zinc-400">
                       <Clock size={14} /> Salida: {driver.time}
                     </span>
@@ -222,6 +295,14 @@ export default function PassengerRequestTrip() {
                       <Users size={14} /> {driver.seats} asientos disponibles
                     </span>
                   </div>
+
+                  <button
+                    onClick={() => handleSelectQuickRoute(driver)}
+                    disabled={isSubmitting}
+                    className="w-full bg-[#00d4aa] hover:bg-[#00bfa0] text-white font-bold py-3 px-4 rounded-xl text-center text-[13px] tracking-wide uppercase transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isSubmitting ? 'Reservando...' : 'Reservar Asiento'}
+                  </button>
                 </div>
               ))}
               

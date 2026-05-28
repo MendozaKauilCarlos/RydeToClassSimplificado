@@ -32,45 +32,6 @@ export default function Trips() {
     const fetchTrips = async () => {
       setLoading(true);
       try {
-        // Si es el usuario de demostración, mostrar datos falsos
-        if (user?.uid === 'demo-user-123') {
-          const mockTrips: Trip[] = [
-            {
-              id: '1',
-              status: 'COMPLETADO',
-              driverId: 'Conductor Prueba',
-              passengerName: 'Usuario Demo',
-              origin: 'Instituto Tecnológico Superior',
-              destination: 'Centro',
-              time: '19:26',
-              price: '$42'
-            },
-            {
-              id: '2',
-              status: 'EN_PROGRESO',
-              driverId: 'Conductor Prueba',
-              passengerName: 'Usuario Demo',
-              origin: 'Plaza Las Américas',
-              destination: 'Universidad Tecnológica',
-              time: '14:30',
-              price: '$80'
-            },
-            {
-              id: '3',
-              status: 'CANCELADO',
-              driverId: 'Buscando...',
-              passengerName: 'Usuario Demo',
-              origin: 'Terminal ADO',
-              destination: 'Zona Hotelera Km 9',
-              time: '10:22',
-              price: '$159'
-            }
-          ];
-          setTrips(mockTrips);
-          setLoading(false);
-          return;
-        }
-
         let fetchedTrips = [];
         if (userData?.role === 'driver') {
           fetchedTrips = await getDriverTrips();
@@ -83,6 +44,7 @@ export default function Trips() {
           id: t.id,
           status: t.status ? t.status.toUpperCase() : 'SOLICITADO',
           driverId: t.driverId || 'Buscando...',
+          driverName: t.driverName || (t.driverId ? 'Conductor Asignado' : 'Por asignar'),
           passengerName: t.passengerName || 'Pasajero',
           origin: t.origin || 'Origen no especificado',
           destination: t.destination || 'Destino no especificado',
@@ -131,12 +93,16 @@ export default function Trips() {
       {/* Header (Mismo que Home para consistencia) */}
       <header className="bg-white dark:bg-zinc-800 px-6 py-4 sticky top-0 z-10 shadow-sm flex justify-between items-center transition-colors duration-200">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-[#00d4aa] rounded-full flex items-center justify-center text-white">
-            <User size={20} />
+          <div className="w-10 h-10 bg-[#00d4aa] rounded-full flex items-center justify-center text-white overflow-hidden shadow-sm">
+            {userData?.photoURL ? (
+              <img src={userData.photoURL} alt="Header Avatar" className="w-full h-full object-cover" />
+            ) : (
+              <User size={20} />
+            )}
           </div>
           <div className="flex flex-col">
             <span className="text-[11px] text-[#718096] dark:text-zinc-400 font-medium">¡Buenas tardes!</span>
-            <span className="text-[13px] font-bold text-[#2d3748] dark:text-zinc-100 uppercase tracking-wide">PAKO</span>
+            <span className="text-[13px] font-bold text-[#2d3748] dark:text-zinc-100 uppercase tracking-wide">{userData?.displayName || 'USUARIO'}</span>
           </div>
         </div>
         <div className="flex items-center gap-6">
@@ -150,7 +116,9 @@ export default function Trips() {
 
       <main className="p-4 md:p-8 max-w-[1200px] mx-auto mt-4">
         
-        <h1 className="text-[28px] font-bold text-[#2d3748] dark:text-zinc-100 mb-6">Mis Viajes como Conductor</h1>
+        <h1 className="text-[28px] font-bold text-[#2d3748] dark:text-zinc-100 mb-6">
+          {userData?.role === 'driver' ? 'Mis Viajes como Conductor' : 'Mis Viajes'}
+        </h1>
 
         {/* Tabs de Filtro */}
         <div className="flex flex-wrap gap-2 mb-6">
@@ -204,13 +172,13 @@ export default function Trips() {
           {filteredTrips.map((trip) => (
             <div key={trip.id} className="bg-white dark:bg-zinc-800 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-zinc-700 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-colors duration-200">
               
-              {/* Sección Izquierda: Botón undefined y Estado */}
+              {/* Sección Izquierda: Botón conductor y Estado */}
               <div className="flex items-center gap-4 md:w-1/3">
                 <div className={`px-4 py-1.5 rounded-full flex items-center gap-2 text-white text-[12px] font-bold ${
                   trip.status === 'CANCELADO' ? 'bg-[#f59e0b]' : 'bg-[#00d4aa]'
                 }`}>
                   <User size={14} />
-                  {trip.driverId}
+                  <span>{userData?.role === 'driver' ? 'Conductor' : (trip as any).driverName}</span>
                 </div>
                 
                 <div className={`px-4 py-1.5 rounded-full text-white text-[11px] font-bold tracking-wider ${

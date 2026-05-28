@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GraduationCap, LogIn, UserPlus, Mail, Lock, User, Car, Phone, IdCard, CarFront, Play } from 'lucide-react';
+import { GraduationCap, LogIn, UserPlus, Mail, Lock, User, Car, Phone, IdCard, CarFront, Play, Shield } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { auth, db } from '../services/firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
@@ -8,28 +8,23 @@ import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
 export default function Login() {
   const [isLogin, setIsLogin] = useState(true);
-  const [userType, setUserType] = useState<'passenger' | 'driver'>('passenger');
+  const [userType, setUserType] = useState<'passenger' | 'driver' | 'admin'>('passenger');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
-  const { loginAsDemo } = useAuth();
 
-  // Form states - Pre-filled for testing purposes
-  const [email, setEmail] = useState('pasajero@prueba.com');
-  const [password, setPassword] = useState('123456');
+  // Form states - Initialized empty/clear but with helpful placeholders
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [license, setLicense] = useState('');
   const [vehicle, setVehicle] = useState('');
 
-  // Update pre-filled data based on userType when registering
+  // Update hints or empty fields based on login status and role
   useEffect(() => {
     if (!isLogin) {
-      if (userType === 'passenger') {
-        setEmail('pasajero@prueba.com');
-      } else {
-        setEmail('conductor@prueba.com');
-      }
+      setEmail('');
     }
   }, [userType, isLogin]);
 
@@ -38,15 +33,26 @@ export default function Login() {
     setError('');
     setLoading(true);
 
+    const cleanEmail = email.trim();
+
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      await signInWithEmailAndPassword(auth, cleanEmail, password);
       navigate('/');
     } catch (err: any) {
       console.error('Error en login:', err);
-      if (err.code === 'auth/user-not-found') setError('Usuario no encontrado');
-      else if (err.code === 'auth/wrong-password') setError('Contraseña incorrecta');
-      else if (err.code === 'auth/invalid-email') setError('Correo electrónico inválido');
-      else setError('Error al iniciar sesión. Comprueba tus credenciales de Firebase en src/services/firebase.ts');
+      if (err.code === 'auth/user-not-found') {
+        setError('El usuario no está registrado.');
+      } else if (err.code === 'auth/wrong-password') {
+        setError('La contraseña es incorrecta.');
+      } else if (err.code === 'auth/invalid-credential') {
+        setError('Usuario no registrado o contraseña incorrecta. Verifica tus datos o crea una cuenta en la pestaña "Registro".');
+      } else if (err.code === 'auth/invalid-email') {
+        setError('El formato del correo electrónico es inválido.');
+      } else if (err.code === 'auth/user-disabled') {
+        setError('Este usuario ha sido deshabilitado temporal o permanentemente.');
+      } else {
+        setError(`Error al iniciar sesión: ${err.message || 'Comprueba tus credenciales'}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -56,6 +62,14 @@ export default function Login() {
     e.preventDefault();
     setError('');
     
+    const cleanEmail = email.trim();
+
+    // Validate institutional domain
+    if (!cleanEmail.toLowerCase().endsWith('@cancun.tecnm.mx')) {
+      setError('Solo se permiten registros con correo institucional @cancun.tecnm.mx');
+      return;
+    }
+
     if (password.length < 6) {
       setError('La contraseña debe tener al menos 6 caracteres');
       return;
@@ -64,38 +78,42 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
       const user = userCredential.user;
 
-      const userData = {
+      const userData: any = {
         uid: user.uid,
         email: user.email,
         name,
         role: userType,
-        phone: userType === 'driver' ? phone : '',
-        license: userType === 'driver' ? license : '',
-        vehicle: userType === 'driver' ? vehicle : '',
-        rating: 0,
+        rating: 5.0,
         trips: 0,
         createdAt: serverTimestamp()
       };
+
+      if (userType === 'driver') {
+        userData.phone = phone;
+        userData.license = license;
+        userData.vehicle = vehicle;
+      }
 
       await setDoc(doc(db, 'users', user.uid), userData);
       
       navigate('/');
     } catch (err: any) {
       console.error('Error en registro:', err);
-      if (err.code === 'auth/email-already-in-use') setError('Este correo ya está registrado');
-      else if (err.code === 'auth/weak-password') setError('La contraseña es muy débil');
-      else setError('Error al registrar usuario. Comprueba tus credenciales de Firebase en src/services/firebase.ts');
+      if (err.code === 'auth/email-already-in-use') {
+        setError('Este correo ya está registrado.');
+      } else if (err.code === 'auth/weak-password') {
+        setError('La contraseña es muy débil.');
+      } else if (err.code === 'auth/operation-not-allowed') {
+        setError('El registro con correo y contraseña no está habilitado en la consola de Firebase.');
+      } else {
+        setError(`Error del servidor Firebase: ${err.message || 'Inténtalo de nuevo.'}`);
+      }
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleDemo = (role: 'passenger' | 'driver') => {
-    loginAsDemo(role);
-    navigate('/');
   };
 
   return (
@@ -197,29 +215,29 @@ export default function Login() {
                 {/* User Type Selector */}
                 <div>
                   <label className="block text-xs font-semibold text-[#718096] dark:text-zinc-400 mb-2 tracking-wider">TIPO DE USUARIO</label>
-                  <div className="flex gap-3">
+                  <div className="flex gap-2">
                     <button
                       type="button"
                       onClick={() => setUserType('passenger')}
-                      className={`flex-1 py-3 rounded-xl border flex items-center justify-center gap-2 transition-all ${
+                      className={`flex-1 py-2.5 rounded-xl border flex items-center justify-center gap-1.5 transition-all text-sm ${
                         userType === 'passenger' 
-                          ? 'bg-[#00d4aa]/10 border-[#00d4aa] text-[#00d4aa]' 
+                          ? 'bg-[#00d4aa]/10 border-[#00d4aa] text-[#00d4aa] font-semibold' 
                           : 'bg-[#f8fafc] dark:bg-zinc-900 border-gray-200 dark:border-zinc-700 text-[#718096] dark:text-zinc-400 hover:border-gray-300 dark:hover:border-zinc-600'
                       }`}
                     >
-                      <User size={18} />
+                      <User size={16} />
                       Pasajero
                     </button>
                     <button
                       type="button"
                       onClick={() => setUserType('driver')}
-                      className={`flex-1 py-3 rounded-xl border flex items-center justify-center gap-2 transition-all ${
+                      className={`flex-1 py-2.5 rounded-xl border flex items-center justify-center gap-1.5 transition-all text-sm ${
                         userType === 'driver' 
-                          ? 'bg-[#00d4aa]/10 border-[#00d4aa] text-[#00d4aa]' 
+                          ? 'bg-[#00d4aa]/10 border-[#00d4aa] text-[#00d4aa] font-semibold' 
                           : 'bg-[#f8fafc] dark:bg-zinc-900 border-gray-200 dark:border-zinc-700 text-[#718096] dark:text-zinc-400 hover:border-gray-300 dark:hover:border-zinc-600'
                       }`}
                     >
-                      <Car size={18} />
+                      <Car size={16} />
                       Conductor
                     </button>
                   </div>
@@ -334,30 +352,6 @@ export default function Login() {
                 </button>
               </form>
             )}
-
-            {/* DEMO BUTTONS */}
-            <div className="mt-8 pt-6 border-t border-gray-100 dark:border-zinc-700/50">
-              <p className="text-center text-xs text-[#718096] dark:text-zinc-500 mb-4 uppercase tracking-wider">Modo Simulación (Sin Backend)</p>
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => handleDemo('passenger')}
-                  className="flex-1 bg-gray-100 dark:bg-zinc-700 hover:bg-gray-200 dark:hover:bg-zinc-600 text-[#2d3748] dark:text-white text-sm font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2"
-                >
-                  <Play size={16} />
-                  Simular Pasajero
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDemo('driver')}
-                  className="flex-1 bg-gray-100 dark:bg-zinc-700 hover:bg-gray-200 dark:hover:bg-zinc-600 text-[#2d3748] dark:text-white text-sm font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2"
-                >
-                  <Play size={16} />
-                  Simular Conductor
-                </button>
-              </div>
-            </div>
-
           </div>
         </div>
       </div>

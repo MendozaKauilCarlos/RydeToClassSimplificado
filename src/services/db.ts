@@ -34,6 +34,46 @@ export async function saveUser(userData: any) {
   }
 }
 
+export async function updateUserRole(userId: string, role: 'passenger' | 'driver' | 'admin') {
+  try {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, {
+      role,
+      updatedAt: serverTimestamp()
+    });
+    return true;
+  } catch (error) {
+    console.error('Error actualizando rol de usuario:', error);
+    throw error;
+  }
+}
+
+export async function toggleUserSuspension(userId: string, currentSuspended: boolean) {
+  try {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, {
+      suspended: !currentSuspended,
+      updatedAt: serverTimestamp()
+    });
+    return true;
+  } catch (error) {
+    console.error('Error suspendiendo/activando usuario:', error);
+    throw error;
+  }
+}
+
+export async function deleteUserFromDB(userId: string) {
+  try {
+    const { deleteDoc } = await import('firebase/firestore');
+    const userRef = doc(db, 'users', userId);
+    await deleteDoc(userRef);
+    return true;
+  } catch (error) {
+    console.error('Error eliminando usuario:', error);
+    throw error;
+  }
+}
+
 export async function getUser(userId: string | null = null) {
   try {
     const uid = userId || auth.currentUser?.uid;

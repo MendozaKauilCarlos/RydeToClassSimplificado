@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
-import { ArrowLeft, MapPin, Navigation, Clock, Users, DollarSign, Map as MapIcon, Plus, Target } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, MapPin, Navigation, Clock, Users, DollarSign, Map as MapIcon, Plus, Target, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { useAuth } from '../context/AuthContext';
+import { createRoute, getDriverRoutes } from '../services/db';
 
 // Fix for default marker icons in React-Leaflet
 // @ts-ignore
@@ -53,6 +55,7 @@ interface RouteData {
 
 export default function DriverCreateRoute() {
   const navigate = useNavigate();
+  const { userData, user } = useAuth();
   
   // Form State
   const [name, setName] = useState('');
@@ -65,6 +68,35 @@ export default function DriverCreateRoute() {
   
   // Routes State
   const [myRoutes, setMyRoutes] = useState<RouteData[]>([]);
+  const [loadingRoutes, setLoadingRoutes] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Load driver routes from Firestore
+  useEffect(() => {
+    const fetchRoutes = async () => {
+      if (!user) return;
+      setLoadingRoutes(true);
+      try {
+        const fetched = await getDriverRoutes(user.uid);
+        const mapped = (fetched || []).map((r: any) => ({
+          id: r.id,
+          name: r.name || '',
+          origin: r.origin || '',
+          destination: r.destination || '',
+          time: r.time || '',
+          days: r.days || [],
+          seats: r.seats || 4,
+          price: r.price ? Number(r.price) : 0
+        }));
+        setMyRoutes(mapped);
+      } catch (error) {
+        console.error('Error loading driver routes:', error);
+      } finally {
+        setLoadingRoutes(false);
+      }
+    };
+    fetchRoutes();
+  }, [user]);
 
   // Map state (Mock coordinates for Cancun)
   const originCoords: [number, number] = [21.1390, -86.8350];
@@ -78,34 +110,63 @@ export default function DriverCreateRoute() {
     }
   };
 
-  const handleCreateRoute = (e: React.FormEvent) => {
+  const handleCreateRoute = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !origin || !destination || !time || days.length === 0 || !price) {
       alert('Por favor, completa todos los campos.');
       return;
     }
 
-    const newRoute: RouteData = {
-      id: Date.now().toString(),
-      name,
-      origin,
-      destination,
-      time,
-      days,
-      seats,
-      price: Number(price)
-    };
+    setIsSubmitting(true);
+    try {
+      const routePayload = {
+        name,
+        origin,
+        destination,
+        time,
+        days,
+        seats: Number(seats),
+        price: Number(price),
+        driverId: user?.uid,
+        driverName: userData?.displayName || userData?.name || 'Conductor',
+        driverRating: userData?.rating || 5.0,
+        vehicle: userData?.vehicle || 'Vehículo',
+        plates: userData?.plates || '',
+        color: userData?.color || '',
+        capacity: userData?.capacity || '4',
+        driverPhotoURL: userData?.photoURL || null
+      };
 
-    setMyRoutes([newRoute, ...myRoutes]);
-    
-    // Reset form
-    setName('');
-    setOrigin('');
-    setDestination('');
-    setTime('');
-    setDays([]);
-    setSeats(4);
-    setPrice('');
+      const newRouteId = await createRoute(routePayload);
+
+      const newRoute: RouteData = {
+        id: newRouteId,
+        name,
+        origin,
+        destination,
+        time,
+        days,
+        seats,
+        price: Number(price)
+      };
+
+      setMyRoutes([newRoute, ...myRoutes]);
+      alert('¡Ruta creada y publicada con éxito en la base de datos!');
+
+      // Reset form
+      setName('');
+      setOrigin('');
+      setDestination('');
+      setTime('');
+      setDays([]);
+      setSeats(4);
+      setPrice('');
+    } catch (error) {
+      console.error('Error creating route:', error);
+      alert('Hubo un error al crear la ruta.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -267,9 +328,22 @@ export default function DriverCreateRoute() {
               />
             </div>
 
-            <button type="submit" className="w-full bg-[#00d4aa] hover:bg-[#00bfa0] text-white font-bold py-4 rounded-xl transition-colors flex items-center justify-center gap-2 mt-6 shadow-md shadow-[#00d4aa]/20 text-[15px]">
-              <Plus size={20} />
-              CREAR RUTA
+            <button 
+              type="submit" 
+              disabled={isSubmitting}
+              className="w-full bg-[#00d4aa] hover:bg-[#00bfa0] text-white font-bold py-4 rounded-xl transition-colors flex items-center justify-center gap-2 mt-6 shadow-md shadow-[#00d4aa]/20 text-[15px] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 size={20} className="animate-spin" />
+                  CREANDO RUTA...
+                </>
+              ) : (
+                <>
+                  <Plus size={20} />
+                  CREAR RUTA
+                </>
+              )}
             </button>
 
           </form>
@@ -279,7 +353,12 @@ export default function DriverCreateRoute() {
         <div>
           <h2 className="text-[18px] font-bold text-[#2d3748] dark:text-zinc-100 mb-4 px-1">Mis Rutas</h2>
           
-          {myRoutes.length === 0 ? (
+          {loadingRoutes ? (
+            <div className="flex flex-col items-center justify-center text-center py-10">
+              <Loader2 size={36} className="text-[#00d4aa] animate-spin mb-4" />
+              <p className="text-[#718096] dark:text-zinc-400 font-medium text-[14px]">Cargando tus rutas...</p>
+            </div>
+          ) : myRoutes.length === 0 ? (
             <div className="flex flex-col items-center justify-center text-center opacity-60 py-10">
               <MapIcon size={56} className="text-[#a0aec0] dark:text-zinc-500 mb-4" />
               <p className="text-[#718096] dark:text-zinc-400 font-medium text-[14px]">No has creado ninguna ruta</p>

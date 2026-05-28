@@ -19,6 +19,8 @@ import Profile from './views/Profile';
 import EditProfile from './views/EditProfile';
 import Settings from './views/Settings';
 
+import UserDirectory from './views/UserDirectory';
+
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
   
@@ -92,6 +94,11 @@ const AppRoutes = () => {
       <Route path="/settings" element={
         <ProtectedRoute>
           <Settings />
+        </ProtectedRoute>
+      } />
+      <Route path="/users" element={
+        <ProtectedRoute>
+          <UserDirectory />
         </ProtectedRoute>
       } />
       

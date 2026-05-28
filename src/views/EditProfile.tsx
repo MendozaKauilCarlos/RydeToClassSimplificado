@@ -1,24 +1,24 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ArrowLeft, Camera, User, Mail, Phone, Car, Hash, Palette, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function EditProfile() {
   const navigate = useNavigate();
-  const { userData } = useAuth();
+  const { userData, updateProfile } = useAuth();
   const isDriver = userData?.role === 'driver';
   
   // Reference for the hidden file input
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // States for the form
+  // States for the form (initialized safely, with an effect to sync when userData loads)
   const [formData, setFormData] = useState({
-    name: userData?.displayName || 'PAKO',
-    email: userData?.email || 'pakodilla3@gmail.com',
-    phone: '+52 998 123 4567',
-    vehicle: 'Nissan Versa 2022',
-    plates: 'ABC-123-D',
-    color: 'Plata',
+    name: '',
+    email: '',
+    phone: '',
+    vehicle: '',
+    plates: '',
+    color: '',
     capacity: '4'
   });
 
@@ -26,6 +26,22 @@ export default function EditProfile() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   // State for the preview URL to show the image instantly in the UI
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+
+  // Synchronize form states when userData is loaded from Firebase
+  useEffect(() => {
+    if (userData) {
+      setFormData({
+        name: userData.displayName || '',
+        email: userData.email || '',
+        phone: userData.phone || '',
+        vehicle: userData.vehicle || '',
+        plates: userData.plates || '',
+        color: userData.color || '',
+        capacity: userData.capacity || '4'
+      });
+      setImagePreview(userData.photoURL || null);
+    }
+  }, [userData]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -49,19 +65,35 @@ export default function EditProfile() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // TODO: [Backend] Implement profile update logic here.
-    // 1. Update text fields in standard user document based on `formData`.
-    // 2. If `selectedFile` is not null, upload it to Firebase Storage (or other service).
-    // 3. Get the uploaded image URL and attach it to the user's document.
-    
-    console.log("Datos a guardar:", formData);
-    console.log("Archivo a subir:", selectedFile);
+    // Convert preview to photoURL or keep existing one
+    const newPhotoURL = imagePreview;
 
-    alert('¡Perfil actualizado con éxito!');
-    navigate('/profile');
+    try {
+      const updatePayload: any = {
+        displayName: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        photoURL: newPhotoURL
+      };
+
+      if (isDriver) {
+        updatePayload.vehicle = formData.vehicle;
+        updatePayload.plates = formData.plates;
+        updatePayload.color = formData.color;
+        updatePayload.capacity = formData.capacity;
+      }
+
+      await updateProfile(updatePayload);
+
+      alert('¡Perfil actualizado con éxito!');
+      navigate('/profile');
+    } catch (error) {
+      console.error("Error al actualizar perfil:", error);
+      alert('Hubo un error al actualizar tu perfil en la base de datos.');
+    }
   };
 
   return (

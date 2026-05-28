@@ -14,6 +14,9 @@ interface RequestData {
   distance: string;
   time: string;
   price: number;
+  type?: 'personalizado' | 'programado' | 'rapido';
+  date?: string | null;
+  scheduledTime?: string | null;
 }
 
 export default function DriverRequests() {
@@ -40,7 +43,10 @@ export default function DriverRequests() {
           destination: data.destination || 'Destino no especificado',
           distance: 'Calculando...', // Esto se puede mejorar con la API de mapas
           time: data.createdAt ? new Date(data.createdAt.toDate()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : 'Reciente',
-          price: data.price || 45
+          price: data.price || 45,
+          type: data.type || 'personalizado',
+          date: data.date || null,
+          scheduledTime: data.time || null
         };
       });
       setRequests(newRequests);
@@ -53,7 +59,7 @@ export default function DriverRequests() {
     try {
       await updateTripStatus(id, 'in_progress', { driverId: user?.uid || 'Conductor' });
       alert('¡Viaje aceptado! Redirigiendo al mapa...');
-      navigate('/driver/active-trips');
+      navigate('/driver/active');
     } catch (error) {
       console.error('Error aceptando viaje:', error);
       alert('Hubo un error al aceptar el viaje.');
@@ -109,10 +115,32 @@ export default function DriverRequests() {
               <div key={request.id} className="bg-white dark:bg-zinc-800 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-zinc-700 transition-colors duration-200">
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <h3 className="font-bold text-[#2d3748] dark:text-zinc-100 text-[16px]">{request.passengerName}</h3>
-                    <p className="text-[12px] text-[#718096] dark:text-zinc-400 flex items-center gap-1 mt-1">
-                      <Clock size={12} /> {request.time} • {request.distance}
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                      <h3 className="font-bold text-[#2d3748] dark:text-zinc-100 text-[16px]">{request.passengerName}</h3>
+                      {request.type === 'programado' ? (
+                        <span className="bg-blue-500/15 text-blue-600 dark:text-blue-400 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border border-blue-500/20">
+                          Programado
+                        </span>
+                      ) : request.type === 'rapido' ? (
+                        <span className="bg-purple-500/15 text-purple-600 dark:text-purple-400 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border border-purple-500/20">
+                          Rápido
+                        </span>
+                      ) : (
+                        <span className="bg-[#00d4aa]/15 text-[#00d4aa] dark:text-[#00f0c2] text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border border-[#00d4aa]/20">
+                          Personalizado
+                        </span>
+                      )}
+                    </div>
+                    
+                    {request.type === 'programado' && (request.date || request.scheduledTime) ? (
+                      <p className="text-[12px] text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-1.5 mt-1">
+                        <Clock size={13} /> Para: {request.date} a las {request.scheduledTime}
+                      </p>
+                    ) : (
+                      <p className="text-[12px] text-[#718096] dark:text-zinc-400 flex items-center gap-1 mt-1">
+                        <Clock size={12} /> Solicitado: {request.time}
+                      </p>
+                    )}
                   </div>
                   <span className="text-[#00d4aa] font-bold text-[20px]">${request.price}</span>
                 </div>

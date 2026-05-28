@@ -4,6 +4,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-routing-machine';
+import { useAuth } from '../context/AuthContext';
 
 // Fix for default marker icons in React-Leaflet
 // @ts-ignore
@@ -69,6 +70,7 @@ function Routing({ origin, destination }: { origin: [number, number] | null, des
         extendToWaypoints: true,
         missingRouteTolerance: 0
       },
+      // @ts-ignore
       createMarker: () => null // We'll use our own markers if needed
     }).addTo(map);
 
@@ -94,6 +96,7 @@ function RecenterAutomatically({ lat, lng }: { lat: number, lng: number }) {
 }
 
 export default function MapView() {
+  const { userData } = useAuth();
   // Default coordinates from the screenshot (Cancun)
   const [position, setPosition] = useState<[number, number]>([21.1390, -86.8350]);
   const [destination, setDestination] = useState<[number, number] | null>(null);
@@ -134,12 +137,16 @@ export default function MapView() {
       {/* Header */}
       <header className="bg-white dark:bg-zinc-800 px-6 py-4 sticky top-0 z-50 shadow-sm flex justify-between items-center transition-colors duration-200">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-[#00d4aa] rounded-full flex items-center justify-center text-white">
-            <User size={20} />
+          <div className="w-10 h-10 bg-[#00d4aa] rounded-full flex items-center justify-center text-white overflow-hidden shadow-sm animate-fade-in">
+            {userData?.photoURL ? (
+              <img src={userData.photoURL} alt="Header Avatar" className="w-full h-full object-cover" />
+            ) : (
+              <User size={20} />
+            )}
           </div>
           <div className="flex flex-col">
             <span className="text-[11px] text-[#718096] dark:text-zinc-400 font-medium">¡Buenas tardes!</span>
-            <span className="text-[13px] font-bold text-[#2d3748] dark:text-zinc-100 uppercase tracking-wide">PAKO</span>
+            <span className="text-[13px] font-bold text-[#2d3748] dark:text-zinc-100 uppercase tracking-wide">{userData?.displayName || 'USUARIO'}</span>
           </div>
         </div>
         <div className="flex items-center gap-6">
@@ -226,8 +233,8 @@ export default function MapView() {
                   <CarFront size={24} className="text-[#00d4aa]" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="font-bold text-[#2d3748] dark:text-zinc-100 uppercase tracking-wide text-sm">UBERX • NISSAN SENTRA</h3>
-                  <p className="text-sm text-[#718096] dark:text-zinc-400 font-medium">Conductor Demo • 4.9 ★</p>
+                  <h3 className="font-bold text-[#2d3748] dark:text-zinc-100 uppercase tracking-wide text-sm">Ruta Activa • Vehículo Escolar</h3>
+                  <p className="text-sm text-[#718096] dark:text-zinc-400 font-medium">Conductor Asignado • 4.9 ★</p>
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-[#00d4aa] text-lg">12 min</p>
@@ -247,7 +254,7 @@ export default function MapView() {
               className="absolute bottom-6 left-4 right-4 z-[400] bg-[#00d4aa] hover:bg-[#00bfa0] text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 text-[16px] shadow-lg shadow-[#00d4aa]/30 transition-colors"
             >
               <Play size={20} className="fill-white" />
-              Iniciar Viaje de Prueba
+              Ver Ruta Escolar
             </button>
           )}
 
