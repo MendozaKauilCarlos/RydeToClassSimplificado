@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Bell, Menu, MapPin, Route as RouteIcon, Target, Play, CarFront } from 'lucide-react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { User, MapPin, Route as RouteIcon, Target, Play, CarFront } from 'lucide-react';
+import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-routing-machine';
@@ -43,46 +43,78 @@ const customRedIcon = L.divIcon({
 });
 
 // Component to handle routing
-function Routing({ origin, destination }: { origin: [number, number] | null, destination: [number, number] | null }) {
+function Routing({ origin, destination, fallbackActive }: { origin: [number, number] | null, destination: [number, number] | null, fallbackActive: (active: boolean) => void }) {
   const map = useMap();
-  const routingControlRef = useRef<L.Routing.Control | null>(null);
+  const routingControlRef = useRef<any>(null);
 
   useEffect(() => {
     if (!map || !origin || !destination) return;
 
     if (routingControlRef.current) {
-      map.removeControl(routingControlRef.current);
+      try {
+        map.removeControl(routingControlRef.current);
+      } catch (e) {
+        console.warn("Error removing control:", e);
+      }
     }
 
-    const waypoints = [
-      L.latLng(origin[0], origin[1]),
-      L.latLng(destination[0], destination[1])
-    ];
+    // Check if Routing exists on L
+    const hasRouting = !!(L as any).Routing;
+    if (!hasRouting) {
+      fallbackActive(true);
+      return;
+    }
 
-    const routingControl = L.Routing.control({
-      waypoints,
-      routeWhileDragging: false,
-      showAlternatives: false,
-      fitSelectedRoutes: true,
-      show: false, // Hide the text instructions panel
-      lineOptions: {
-        styles: [{ color: '#00d4aa', opacity: 0.8, weight: 6 }],
-        extendToWaypoints: true,
-        missingRouteTolerance: 0
-      },
-      // @ts-ignore
-      createMarker: () => null // We'll use our own markers if needed
-    }).addTo(map);
+    try {
+      const waypoints = [
+        L.latLng(origin[0], origin[1]),
+        L.latLng(destination[0], destination[1])
+      ];
 
-    routingControlRef.current = routingControl;
+      const routingControl = (L as any).Routing.control({
+        waypoints,
+        routeWhileDragging: false,
+        showAlternatives: false,
+        fitSelectedRoutes: true,
+        show: false, // Hide the text instructions panel
+        lineOptions: {
+          styles: [{ color: '#00d4aa', opacity: 0.8, weight: 6 }],
+          extendToWaypoints: true,
+          missingRouteTolerance: 0
+        },
+        createMarker: () => null // We'll use our own markers if needed
+      }).addTo(map);
+
+      routingControlRef.current = routingControl;
+      fallbackActive(false);
+    } catch (err) {
+      console.error("Routing control creation error:", err);
+      fallbackActive(true);
+    }
 
     return () => {
       if (routingControlRef.current && map) {
-        map.removeControl(routingControlRef.current);
+        try {
+          map.removeControl(routingControlRef.current);
+        } catch (e) {
+          // ignore
+        }
       }
     };
-  }, [map, origin, destination]);
+  }, [map, origin, destination, fallbackActive]);
 
+  return null;
+}
+
+// Force Leaflet map layout calculation after rendering inside an iframe
+function InvalidateMapSize() {
+  const map = useMap();
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      map.invalidateSize();
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [map]);
   return null;
 }
 
@@ -102,6 +134,7 @@ export default function MapView() {
   const [destination, setDestination] = useState<[number, number] | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const [isRouting, setIsRouting] = useState(false);
+  const [useFallbackLine, setUseFallbackLine] = useState(true);
 
   // Function to get real user location
   const handleLocateMe = () => {
@@ -150,11 +183,6 @@ export default function MapView() {
           </div>
         </div>
         <div className="flex items-center gap-6">
-          <div className="relative cursor-pointer">
-            <Bell size={24} className="text-[#4a5568] dark:text-zinc-300 fill-[#4a5568] dark:fill-zinc-300" />
-            <span className="absolute -top-1.5 -right-1.5 bg-[#e74c3c] text-white text-[10px] font-bold w-[18px] h-[18px] rounded-full flex items-center justify-center border-2 border-white dark:border-zinc-800">3</span>
-          </div>
-          <Menu size={28} className="text-[#4a5568] dark:text-zinc-300 cursor-pointer" />
         </div>
       </header>
 
@@ -221,8 +249,18 @@ export default function MapView() {
                 </Popup>
               </Marker>
             )}
-            <Routing origin={position} destination={destination} />
+            {destination && useFallbackLine && (
+              <Polyline
+                positions={[position, destination]}
+                color="#00d4aa"
+                weight={5}
+                opacity={0.8}
+                dashArray="10, 10"
+              />
+            )}
+            <Routing origin={position} destination={destination} fallbackActive={setUseFallbackLine} />
             <RecenterAutomatically lat={position[0]} lng={position[1]} />
+            <InvalidateMapSize />
           </MapContainer>
 
           {/* Floating UI at the bottom of the map when tracking */}

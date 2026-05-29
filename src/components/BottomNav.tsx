@@ -17,6 +17,7 @@ export default function BottomNav() {
       ]
     : [
         { path: '/', icon: Home, label: 'Inicio' },
+        { path: '/map', icon: Map, label: 'Mapa' },
         { path: '/trips', icon: Route, label: 'Viajes' },
         { path: '/profile', icon: User, label: 'Perfil' },
       ];

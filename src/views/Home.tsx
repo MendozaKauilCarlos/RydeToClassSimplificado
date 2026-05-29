@@ -133,12 +133,6 @@ export default function Home() {
           </div>
         </div>
         <div className="flex items-center gap-4 md:gap-6">
-          <div className="relative cursor-pointer" onClick={() => setShowNotifications(!showNotifications)}>
-            <Bell size={24} className="text-[#4a5568] dark:text-zinc-300 fill-[#4a5568] dark:fill-zinc-300" />
-            <span className="absolute -top-1.5 -right-1.5 bg-[#e74c3c] text-white text-[10px] font-bold w-[18px] h-[18px] rounded-full flex items-center justify-center border-2 border-white dark:border-zinc-800">
-              {notifications.length}
-            </span>
-          </div>
           <button 
             onClick={async () => {
               await logout();

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, MapPin, Navigation, Clock, Users, DollarSign, Map as MapIcon, Plus, Target, Loader2, Power, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useAuth } from '../context/AuthContext';
@@ -102,9 +102,134 @@ export default function DriverCreateRoute() {
     fetchRoutes();
   }, [user]);
 
-  // Map state (Mock coordinates for Cancun)
-  const originCoords: [number, number] = [21.1390, -86.8350];
-  const destCoords: [number, number] = [21.1619, -86.8515];
+  // Base de datos de geocodificación rápida local para Cancun
+  const LOCAL_GEOCODE_DB: { [key: string]: [number, number] } = {
+    'instituto tecnologico de cancun': [21.1326, -86.9225],
+    'tecnologico de cancun': [21.1326, -86.9225],
+    'itc': [21.1326, -86.9225],
+    'universidad del caribe': [21.2014, -86.8242],
+    'unicaribe': [21.2014, -86.8242],
+    'crucero': [21.1738, -86.8247],
+    'coppel crucero': [21.1738, -86.8247],
+    'plaza las americas': [21.1472, -86.8286],
+    'las americas': [21.1472, -86.8286],
+    'centro': [21.1619, -86.8515],
+    'huayacan': [21.1098, -86.8778],
+    'la luna': [21.1352, -86.8550],
+    'kabah': [21.1485, -86.8580],
+    'zofra': [21.1850, -86.8120]
+  };
+
+  // Coordenadas con estado para geolocalización interactiva
+  const [originCoords, setOriginCoords] = useState<[number, number]>([21.1390, -86.8350]);
+  const [destCoords, setDestCoords] = useState<[number, number]>([21.1619, -86.8515]);
+
+  const tryLocalGeocode = (text: string): [number, number] | null => {
+    if (!text) return null;
+    const clean = text.toLowerCase().trim();
+    if (LOCAL_GEOCODE_DB[clean]) return LOCAL_GEOCODE_DB[clean];
+    for (const [key, coords] of Object.entries(LOCAL_GEOCODE_DB)) {
+      if (clean.includes(key) || key.includes(clean)) {
+        return coords;
+      }
+    }
+    return null;
+  };
+
+  // Geocodificación asíncrona debounced para el origen
+  useEffect(() => {
+    if (!origin) return;
+    const local = tryLocalGeocode(origin);
+    if (local) {
+      setOriginCoords(local);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(origin + ', Cancun, Mexico')}&limit=1`);
+        const data = await res.json();
+        if (data && data.length > 0) {
+          setOriginCoords([parseFloat(data[0].lat), parseFloat(data[0].lon)]);
+        }
+      } catch (err) {
+        console.error("Online geocode error:", err);
+      }
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [origin]);
+
+  // Geocodificación asíncrona debounced para el destino
+  useEffect(() => {
+    if (!destination) return;
+    const local = tryLocalGeocode(destination);
+    if (local) {
+      setDestCoords(local);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destination + ', Cancun, Mexico')}&limit=1`);
+        const data = await res.json();
+        if (data && data.length > 0) {
+          setDestCoords([parseFloat(data[0].lat), parseFloat(data[0].lon)]);
+        }
+      } catch (err) {
+        console.error("Online geocode error:", err);
+      }
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [destination]);
+
+  // Manejo de marcadores arrastrados para autocompletar la dirección de la ruta
+  const handleDragOrigin = async (e: any) => {
+    const marker = e.target;
+    if (marker) {
+      const position = marker.getLatLng();
+      setOriginCoords([position.lat, position.lng]);
+      setOrigin(`Coord: ${position.lat.toFixed(4)}, ${position.lng.toFixed(4)}`);
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.lat}&lon=${position.lng}&zoom=18`);
+        const data = await res.json();
+        if (data && data.display_name) {
+          const shortAddress = data.display_name.split(',').slice(0, 3).join(',');
+          setOrigin(shortAddress);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  };
+
+  const handleDragDest = async (e: any) => {
+    const marker = e.target;
+    if (marker) {
+      const position = marker.getLatLng();
+      setDestCoords([position.lat, position.lng]);
+      setDestination(`Coord: ${position.lat.toFixed(4)}, ${position.lng.toFixed(4)}`);
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.lat}&lon=${position.lng}&zoom=18`);
+        const data = await res.json();
+        if (data && data.display_name) {
+          const shortAddress = data.display_name.split(',').slice(0, 3).join(',');
+          setDestination(shortAddress);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  };
+
+  // Componente para encajar el mapa sobre el origen y destino automáticamente
+  function RecenterMapToSelected() {
+    const map = useMap();
+    useEffect(() => {
+      if (originCoords && destCoords) {
+        const bounds = L.latLngBounds([originCoords, destCoords]);
+        map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+      }
+    }, [originCoords, destCoords, map]);
+    return null;
+  }
 
   const toggleDay = (day: string) => {
     if (days.includes(day)) {
@@ -213,21 +338,65 @@ export default function DriverCreateRoute() {
         <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 p-5 md:p-8 mb-8 transition-colors duration-200">
           <form onSubmit={handleCreateRoute} className="space-y-6">
             
-            {/* Mapa de previsualización - Oculto temporalmente */}
-            <div className="w-full bg-gradient-to-r from-[#00d4aa]/5 to-emerald-500/5 dark:from-zinc-800 dark:to-zinc-800/80 rounded-xl p-6 border border-dashed border-gray-300 dark:border-zinc-700 flex flex-col justify-center items-center text-center">
-              <MapIcon size={32} className="text-[#00d4aa] mb-2 shrink-0" />
-              <p className="text-xs font-black text-[#2d3748] dark:text-zinc-100 uppercase tracking-widest">Trayecto Escolar Estimado</p>
-              <p className="text-[12px] text-[#718096] dark:text-zinc-400 mt-1.5 max-w-[400px]">
-                {origin || destination ? (
-                  <span className="font-medium">
-                    <span className="text-[#00d4aa] font-bold">{origin || 'Origen no especificado'}</span>
-                    <span className="mx-2">➔</span>
-                    <span className="text-rose-500 font-bold">{destination || 'Destino no especificado'}</span>
-                  </span>
-                ) : (
-                  'Ingresa el punto de origen y llegada para trazar la ruta del campus.'
-                )}
-              </p>
+            {/* Mapa de previsualización interactivo con react-leaflet */}
+            <div className="w-full flex flex-col gap-2">
+              <span className="text-xs font-black text-[#00d4aa] uppercase tracking-widest flex items-center gap-1.5">
+                <MapIcon size={14} className="shrink-0" /> Trayecto de Ruta Propuesta
+              </span>
+              <div className="w-full h-[280px] rounded-xl overflow-hidden shadow-inner border border-gray-100 dark:border-zinc-700 relative bg-gray-100 dark:bg-zinc-900">
+                <MapContainer
+                  center={originCoords}
+                  zoom={13}
+                  scrollWheelZoom={true}
+                  style={{ height: '100%', width: '100%' }}
+                  zoomControl={false}
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    className="dark:brightness-75 dark:contrast-125 dark:hue-rotate-180 dark:invert"
+                  />
+                  
+                  {/* Punto de origen arrastrable */}
+                  <Marker 
+                    position={originCoords} 
+                    draggable={true}
+                    eventHandlers={{ dragend: handleDragOrigin }}
+                    icon={originIcon}
+                  >
+                    <Popup>
+                      <div className="font-bold text-xs p-1">Punto de Origen (Arrastable)</div>
+                    </Popup>
+                  </Marker>
+
+                  {/* Punto de destino arrastrable */}
+                  <Marker 
+                    position={destCoords} 
+                    draggable={true}
+                    eventHandlers={{ dragend: handleDragDest }}
+                    icon={destIcon}
+                  >
+                    <Popup>
+                      <div className="font-bold text-xs p-1">Punto de Destino (Arrastable)</div>
+                    </Popup>
+                  </Marker>
+
+                  {/* Línea trazada conectando ambos puntos */}
+                  <Polyline 
+                    positions={[originCoords, destCoords]} 
+                    color="#00d4aa" 
+                    weight={4} 
+                    opacity={0.8}
+                    dashArray="6, 6" 
+                  />
+
+                  <RecenterMapToSelected />
+                </MapContainer>
+
+                <div className="absolute top-3 right-3 z-[400] bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md px-2.5 py-1 rounded-md shadow-sm text-[10px] font-bold text-gray-500 max-w-[200px] leading-tight select-none border border-gray-150">
+                  💡 Arrastra los círculos para ajustar los puntos en el mapa
+                </div>
+              </div>
             </div>
 
             {/* Nombre de la ruta */}

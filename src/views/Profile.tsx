@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Bell, Menu, Edit, Settings, LogOut, ChevronRight, ToggleLeft, ToggleRight, Users } from 'lucide-react';
+import { User, Edit, Settings, LogOut, ChevronRight, ToggleLeft, ToggleRight, Users } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { deactivateDriverRoutes } from '../services/db';
@@ -48,11 +48,6 @@ export default function Profile() {
           </div>
         </div>
         <div className="flex items-center gap-6">
-          <div className="relative cursor-pointer">
-            <Bell size={24} className="text-[#4a5568] dark:text-zinc-300 fill-[#4a5568] dark:fill-zinc-300" />
-            <span className="absolute -top-1.5 -right-1.5 bg-[#e74c3c] text-white text-[10px] font-bold w-[18px] h-[18px] rounded-full flex items-center justify-center border-2 border-white dark:border-zinc-800">3</span>
-          </div>
-          <Menu size={28} className="text-[#4a5568] dark:text-zinc-300 cursor-pointer" />
         </div>
       </header>
 
