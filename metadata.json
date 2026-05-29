@@ -1,5 +1,5 @@
 {
   "name": "Refactorización y Carrito de Compras",
-  "description": "Aplicación para refactorizar código espagueti y construir un carrito de compras con React y Node.js/Haskell.",
-  "requestFramePermissions": []
+  "description": "Aplicación de Carpooling y Aventón Escolar para alumnos del Instituto Tecnológico de Cancún (ITC), con roles de conductores, pasajeros, mapas interactivos en tiempo real y simulación de viaje.",
+  "requestFramePermissions": ["geolocation"]
 }

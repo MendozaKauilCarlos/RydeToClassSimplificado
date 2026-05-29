@@ -3,6 +3,7 @@ import { ArrowLeft, MapPin, Navigation, Calendar, Clock, Users, Zap, CalendarDay
 import { useNavigate } from 'react-router-dom';
 import { createTrip, searchRoutes } from '../services/db';
 import { useAuth } from '../context/AuthContext';
+import { GeolocationNotice } from '../components/GeolocationNotice';
 
 export default function PassengerRequestTrip() {
   const navigate = useNavigate();
@@ -16,6 +17,54 @@ export default function PassengerRequestTrip() {
   const [date, setDate] = useState('');
   const [time, setTime] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
+
+  const handleLocateCurrentPosition = () => {
+    setIsLocating(true);
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          // Set initial fallback coordinates label
+          setOrigin(`Mi ubicación (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
+          
+          try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18`);
+            const data = await res.json();
+            if (data && data.display_name) {
+              const shortAddress = data.display_name.split(',').slice(0, 3).join(',');
+              setOrigin(shortAddress);
+            }
+          } catch (err) {
+            console.error("Error reverse geocoding current position:", err);
+          } finally {
+            setIsLocating(false);
+          }
+        },
+        (err) => {
+          console.error("Error getting geolocation:", err);
+          alert("No se pudo acceder a tu ubicación. Por favor, otorganos los permisos correspondientes.");
+          setIsLocating(false);
+        },
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+      );
+    } else {
+      alert("La geolocalización no está soportada en tu navegador.");
+      setIsLocating(false);
+    }
+  };
+
+  // Si el origen cambia y no proviene del TEC, fijar el destino automáticamente al Tecnológico de Cancún
+  useEffect(() => {
+    if (!origin) return;
+    const cleanOrigin = origin.toLowerCase().trim();
+    const isOriginTec = cleanOrigin.includes('tec') || cleanOrigin.includes('itc') || cleanOrigin.includes('tecnológico') || cleanOrigin.includes('tecnologico');
+    
+    if (!isOriginTec) {
+      setDestination('Instituto Tecnológico de Cancún');
+    }
+  }, [origin]);
 
   // Live active routes/drivers from DB for "Rápido" tab
   const [drivers, setDrivers] = useState<any[]>([]);
@@ -117,6 +166,8 @@ export default function PassengerRequestTrip() {
 
       <main className="p-4 md:p-8 max-w-[600px] mx-auto mt-4">
         
+        <GeolocationNotice className="mb-4" />
+        
         <div className="bg-white dark:bg-zinc-800 rounded-3xl p-6 shadow-sm border border-gray-100 dark:border-zinc-700 transition-colors duration-200">
           
           {/* Tabs */}
@@ -159,8 +210,18 @@ export default function PassengerRequestTrip() {
                     onChange={(e) => setOrigin(e.target.value)}
                     className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl py-3.5 pl-4 pr-12 text-[#2d3748] dark:text-zinc-100 placeholder:text-[#a0aec0] dark:placeholder:text-zinc-500 focus:outline-none focus:border-[#00d4aa] focus:ring-1 focus:ring-[#00d4aa] transition-all text-[15px]"
                   />
-                  <button className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 bg-[#00d4aa] rounded-lg flex items-center justify-center text-white hover:bg-[#00bfa0] transition-colors">
-                    <MapPin size={18} />
+                  <button 
+                    type="button" 
+                    onClick={handleLocateCurrentPosition}
+                    disabled={isLocating}
+                    title="Usar mi ubicación actual"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 bg-[#00d4aa] rounded-lg flex items-center justify-center text-white hover:bg-[#00bfa0] transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    {isLocating ? (
+                      <div className="w-4 h-4 border-2 border-white rounded-full border-t-transparent animate-spin"></div>
+                    ) : (
+                      <MapPin size={18} />
+                    )}
                   </button>
                 </div>
               </div>

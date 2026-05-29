@@ -1,11 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, MapPin, Navigation, Clock, Users, DollarSign, Map as MapIcon, Plus, Target, Loader2, Power, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ArrowLeft, MapPin, Navigation, Clock, Users, DollarSign, Map as MapIcon, Plus, Target, Loader2, Power, Trash2, Key, HelpCircle, ExternalLink, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
+import { APIProvider, Map as GoogleMap, AdvancedMarker as GoogleMarker, useMap as useGoogleMap } from '@vis.gl/react-google-maps';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useAuth } from '../context/AuthContext';
 import { createRoute, getDriverRoutes, deleteRoute, toggleRouteActive } from '../services/db';
+import { MapErrorBoundary } from '../components/MapErrorBoundary';
+import { GeolocationNotice } from '../components/GeolocationNotice';
+
+// Safe check for Google Maps API Key
+const API_KEY =
+  process.env.GOOGLE_MAPS_PLATFORM_KEY ||
+  (import.meta as any).env?.VITE_GOOGLE_MAPS_PLATFORM_KEY ||
+  (globalThis as any).GOOGLE_MAPS_PLATFORM_KEY ||
+  '';
+const hasValidKey = Boolean(API_KEY) && API_KEY !== 'YOUR_API_KEY' && API_KEY.trim() !== '';
 
 // Fix for default marker icons in React-Leaflet
 // @ts-ignore
@@ -123,6 +134,57 @@ export default function DriverCreateRoute() {
   // Coordenadas con estado para geolocalización interactiva
   const [originCoords, setOriginCoords] = useState<[number, number]>([21.1390, -86.8350]);
   const [destCoords, setDestCoords] = useState<[number, number]>([21.1619, -86.8515]);
+  const [isLocatingOrigin, setIsLocatingOrigin] = useState(false);
+  const [showGoogleMaps, setShowGoogleMaps] = useState(hasValidKey);
+
+  // Guardar el último texto geocodificado de forma precisa (por drag o geolocalización) para evitar loops
+  const lastGeocodedOriginRef = useRef<string>('');
+  const lastGeocodedDestRef = useRef<string>('');
+
+  useEffect(() => {
+    if (hasValidKey) {
+      setShowGoogleMaps(true);
+    }
+  }, [hasValidKey]);
+
+  const handleLocateCurrentPosition = () => {
+    setIsLocatingOrigin(true);
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          setOriginCoords([lat, lng]);
+          const fallbackLabel = `Mi ubicación (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+          lastGeocodedOriginRef.current = fallbackLabel;
+          setOrigin(fallbackLabel);
+          
+          try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18`);
+            const data = await res.json();
+            if (data && data.display_name) {
+              const shortAddress = data.display_name.split(',').slice(0, 3).join(',');
+              lastGeocodedOriginRef.current = shortAddress;
+              setOrigin(shortAddress);
+            }
+          } catch (err) {
+            console.error("Error reverse geocoding current position:", err);
+          } finally {
+            setIsLocatingOrigin(false);
+          }
+        },
+        (err) => {
+          console.error("Error getting geolocation:", err);
+          alert("No se pudo acceder a tu ubicación. Por favor, otorganos los permisos correspondientes.");
+          setIsLocatingOrigin(false);
+        },
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+      );
+    } else {
+      alert("La geolocalización no está soportada en tu navegador.");
+      setIsLocatingOrigin(false);
+    }
+  };
 
   const tryLocalGeocode = (text: string): [number, number] | null => {
     if (!text) return null;
@@ -139,17 +201,31 @@ export default function DriverCreateRoute() {
   // Geocodificación asíncrona debounced para el origen
   useEffect(() => {
     if (!origin) return;
+
+    // Si ya es el que acabamos de geocodificar por GPS/Drag o tiene formato de Mi ubicación/Coord, evitar la búsqueda redundante
+    if (
+      origin === lastGeocodedOriginRef.current ||
+      origin.startsWith('Mi ubicación') ||
+      origin.startsWith('Coord:')
+    ) {
+      return;
+    }
+
     const local = tryLocalGeocode(origin);
     if (local) {
       setOriginCoords(local);
+      lastGeocodedOriginRef.current = origin;
       return;
     }
+
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(origin + ', Cancun, Mexico')}&limit=1`);
         const data = await res.json();
         if (data && data.length > 0) {
-          setOriginCoords([parseFloat(data[0].lat), parseFloat(data[0].lon)]);
+          const coords: [number, number] = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+          setOriginCoords(coords);
+          lastGeocodedOriginRef.current = origin;
         }
       } catch (err) {
         console.error("Online geocode error:", err);
@@ -158,20 +234,47 @@ export default function DriverCreateRoute() {
     return () => clearTimeout(timer);
   }, [origin]);
 
+  // Si el origen cambia y no proviene del TEC, fijar el destino automáticamente al Tecnológico de Cancún y sus coordenadas
+  useEffect(() => {
+    if (!origin) return;
+    const cleanOrigin = origin.toLowerCase().trim();
+    const isOriginTec = cleanOrigin.includes('tec') || cleanOrigin.includes('itc') || cleanOrigin.includes('tecnológico') || cleanOrigin.includes('tecnologico');
+    
+    if (!isOriginTec) {
+      lastGeocodedDestRef.current = 'Instituto Tecnológico de Cancún';
+      setDestination('Instituto Tecnológico de Cancún');
+      setDestCoords([21.1326, -86.9225]);
+    }
+  }, [origin]);
+
   // Geocodificación asíncrona debounced para el destino
   useEffect(() => {
     if (!destination) return;
+
+    // Si ya es el que acabamos de geocodificar por drag o formato de ubicación, evitar re-calcular
+    if (
+      destination === lastGeocodedDestRef.current ||
+      destination.startsWith('Mi ubicación') ||
+      destination.startsWith('Coord:')
+    ) {
+      return;
+    }
+
     const local = tryLocalGeocode(destination);
     if (local) {
       setDestCoords(local);
+      lastGeocodedDestRef.current = destination;
       return;
     }
+
     const timer = setTimeout(async () => {
       try {
         const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(destination + ', Cancun, Mexico')}&limit=1`);
         const data = await res.json();
         if (data && data.length > 0) {
-          setDestCoords([parseFloat(data[0].lat), parseFloat(data[0].lon)]);
+          const coords: [number, number] = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+          setDestCoords(coords);
+          lastGeocodedDestRef.current = destination;
         }
       } catch (err) {
         console.error("Online geocode error:", err);
@@ -186,12 +289,15 @@ export default function DriverCreateRoute() {
     if (marker) {
       const position = marker.getLatLng();
       setOriginCoords([position.lat, position.lng]);
-      setOrigin(`Coord: ${position.lat.toFixed(4)}, ${position.lng.toFixed(4)}`);
+      const label = `Coord: ${position.lat.toFixed(4)}, ${position.lng.toFixed(4)}`;
+      lastGeocodedOriginRef.current = label;
+      setOrigin(label);
       try {
         const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.lat}&lon=${position.lng}&zoom=18`);
         const data = await res.json();
         if (data && data.display_name) {
           const shortAddress = data.display_name.split(',').slice(0, 3).join(',');
+          lastGeocodedOriginRef.current = shortAddress;
           setOrigin(shortAddress);
         }
       } catch (err) {
@@ -205,16 +311,63 @@ export default function DriverCreateRoute() {
     if (marker) {
       const position = marker.getLatLng();
       setDestCoords([position.lat, position.lng]);
-      setDestination(`Coord: ${position.lat.toFixed(4)}, ${position.lng.toFixed(4)}`);
+      const label = `Coord: ${position.lat.toFixed(4)}, ${position.lng.toFixed(4)}`;
+      lastGeocodedDestRef.current = label;
+      setDestination(label);
       try {
         const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${position.lat}&lon=${position.lng}&zoom=18`);
         const data = await res.json();
         if (data && data.display_name) {
           const shortAddress = data.display_name.split(',').slice(0, 3).join(',');
+          lastGeocodedDestRef.current = shortAddress;
           setDestination(shortAddress);
         }
       } catch (err) {
         console.error(err);
+      }
+    }
+  };
+
+  const handleGoogleDragOrigin = async (e: google.maps.MapMouseEvent) => {
+    if (e.latLng) {
+      const lat = e.latLng.lat();
+      const lng = e.latLng.lng();
+      setOriginCoords([lat, lng]);
+      const label = `Coord: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      lastGeocodedOriginRef.current = label;
+      setOrigin(label);
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18`);
+        const data = await res.json();
+        if (data && data.display_name) {
+          const shortAddress = data.display_name.split(',').slice(0, 3).join(',');
+          lastGeocodedOriginRef.current = shortAddress;
+          setOrigin(shortAddress);
+        }
+      } catch (err) {
+        console.error("Error reverse geocoding on drag origin:", err);
+      }
+    }
+  };
+
+  const handleGoogleDragDest = async (e: google.maps.MapMouseEvent) => {
+    if (e.latLng) {
+      const lat = e.latLng.lat();
+      const lng = e.latLng.lng();
+      setDestCoords([lat, lng]);
+      const label = `Coord: ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      lastGeocodedDestRef.current = label;
+      setDestination(label);
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18`);
+        const data = await res.json();
+        if (data && data.display_name) {
+          const shortAddress = data.display_name.split(',').slice(0, 3).join(',');
+          lastGeocodedDestRef.current = shortAddress;
+          setDestination(shortAddress);
+        }
+      } catch (err) {
+        console.error("Error reverse geocoding on drag destination:", err);
       }
     }
   };
@@ -228,6 +381,63 @@ export default function DriverCreateRoute() {
         map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
       }
     }, [originCoords, destCoords, map]);
+    return null;
+  }
+
+  // Componente para encajar Google Maps sobre el origen y destino automáticamente
+  function RecenterGoogleMapToSelected() {
+    const map = useGoogleMap();
+    useEffect(() => {
+      if (map && originCoords && destCoords) {
+        try {
+          const bounds = new google.maps.LatLngBounds();
+          bounds.extend({ lat: originCoords[0], lng: originCoords[1] });
+          bounds.extend({ lat: destCoords[0], lng: destCoords[1] });
+          map.fitBounds(bounds, { top: 40, bottom: 40, left: 40, right: 40 });
+        } catch (e) {
+          console.error("Error setting bounds on Google Map:", e);
+        }
+      }
+    }, [originCoords, destCoords, map]);
+    return null;
+  }
+
+  function GoogleMapPolyline({ positions, color = '#00d4aa', weight = 5 }: { positions: google.maps.LatLngLiteral[], color?: string, weight?: number }) {
+    const map = useGoogleMap();
+    const polylineRef = useRef<google.maps.Polyline | null>(null);
+
+    useEffect(() => {
+      if (!map) return;
+      if (polylineRef.current) {
+        polylineRef.current.setMap(null);
+      }
+      polylineRef.current = new google.maps.Polyline({
+        path: positions,
+        geodesic: true,
+        strokeColor: color,
+        strokeOpacity: 0.8,
+        strokeWeight: weight,
+      });
+      polylineRef.current.setMap(map);
+      return () => {
+        if (polylineRef.current) {
+          polylineRef.current.setMap(null);
+        }
+      };
+    }, [map, positions, color, weight]);
+
+    return null;
+  }
+
+  // Force Leaflet map layout calculation after rendering inside an iframe
+  function InvalidateMapSize() {
+    const map = useMap();
+    useEffect(() => {
+      const timer = setTimeout(() => {
+        map.invalidateSize();
+      }, 250);
+      return () => clearTimeout(timer);
+    }, [map]);
     return null;
   }
 
@@ -334,67 +544,180 @@ export default function DriverCreateRoute() {
 
       <main className="p-4 md:p-8 max-w-[800px] mx-auto">
         
+        <GeolocationNotice 
+          onPermissionGranted={(coords) => {
+            setOriginCoords(coords);
+            setOrigin(`Mi ubicación (${coords[0].toFixed(4)}, ${coords[1].toFixed(4)})`);
+          }} 
+          className="mb-6"
+        />
+
         {/* Formulario */}
         <div className="bg-white dark:bg-zinc-800 rounded-2xl shadow-sm border border-gray-100 dark:border-zinc-700 p-5 md:p-8 mb-8 transition-colors duration-200">
           <form onSubmit={handleCreateRoute} className="space-y-6">
             
-            {/* Mapa de previsualización interactivo con react-leaflet */}
+            {/* Mapa de previsualización interactivo */}
             <div className="w-full flex flex-col gap-2">
-              <span className="text-xs font-black text-[#00d4aa] uppercase tracking-widest flex items-center gap-1.5">
-                <MapIcon size={14} className="shrink-0" /> Trayecto de Ruta Propuesta
-              </span>
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-black text-[#00d4aa] uppercase tracking-widest flex items-center gap-1.5">
+                  <MapIcon size={14} className="shrink-0" /> Trayecto de Ruta Propuesta
+                </span>
+
+                {/* Selector de Mapa flotante */}
+                <div className="flex gap-1 bg-gray-200/50 dark:bg-zinc-700/50 p-0.5 rounded-lg border border-gray-100 dark:border-zinc-700">
+                  <button 
+                    type="button"
+                    onClick={() => setShowGoogleMaps(true)}
+                    className={`px-2 py-1 rounded-md text-[9px] font-bold uppercase transition-all cursor-pointer ${
+                      showGoogleMaps 
+                        ? 'bg-[#00d4aa] text-white shadow-xs' 
+                        : 'text-gray-500 dark:text-zinc-400 hover:text-[#00d4aa]'
+                    }`}
+                  >
+                    Google Maps
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setShowGoogleMaps(false)}
+                    className={`px-2 py-1 rounded-md text-[9px] font-bold uppercase transition-all cursor-pointer ${
+                      !showGoogleMaps 
+                        ? 'bg-[#00d4aa] text-white shadow-xs' 
+                        : 'text-gray-500 dark:text-zinc-400 hover:text-[#00d4aa]'
+                    }`}
+                  >
+                    Leaflet (Libre)
+                  </button>
+                </div>
+              </div>
+
               <div className="w-full h-[280px] rounded-xl overflow-hidden shadow-inner border border-gray-100 dark:border-zinc-700 relative bg-gray-100 dark:bg-zinc-900">
-                <MapContainer
-                  center={originCoords}
-                  zoom={13}
-                  scrollWheelZoom={true}
-                  style={{ height: '100%', width: '100%' }}
-                  zoomControl={false}
-                >
-                  <TileLayer
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                    className="dark:brightness-75 dark:contrast-125 dark:hue-rotate-180 dark:invert"
-                  />
-                  
-                  {/* Punto de origen arrastrable */}
-                  <Marker 
-                    position={originCoords} 
-                    draggable={true}
-                    eventHandlers={{ dragend: handleDragOrigin }}
-                    icon={originIcon}
+                {showGoogleMaps ? (
+                  hasValidKey ? (
+                    <MapErrorBoundary fallbackToLeaflet={() => setShowGoogleMaps(false)} showLeafletOption={true}>
+                      <APIProvider apiKey={API_KEY} version="weekly">
+                        <GoogleMap
+                          defaultCenter={{ lat: originCoords[0], lng: originCoords[1] }}
+                          defaultZoom={13}
+                          mapId="DEMO_MAP_ID"
+                          internalUsageAttributionIds={['gmp_mcp_codeassist_v1_aistudio']}
+                          className="w-full h-full"
+                          style={{ width: '100%', height: '100%' }}
+                          disableDefaultUI={true}
+                        >
+                          <GoogleMarker 
+                            position={{ lat: originCoords[0], lng: originCoords[1] }}
+                            draggable={true}
+                            onDragEnd={handleGoogleDragOrigin}
+                          >
+                            <div style={{
+                              backgroundColor: '#00d4aa',
+                              width: '18px',
+                              height: '18px',
+                              borderRadius: '50%',
+                              border: '3px solid white',
+                              boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
+                              transform: 'translate(-50%, -50%)',
+                            }} />
+                          </GoogleMarker>
+                          <GoogleMarker 
+                            position={{ lat: destCoords[0], lng: destCoords[1] }}
+                            draggable={true}
+                            onDragEnd={handleGoogleDragDest}
+                          >
+                            <div style={{
+                              backgroundColor: '#e74c3c',
+                              width: '18px',
+                              height: '18px',
+                              borderRadius: '50%',
+                              border: '3px solid white',
+                              boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
+                              transform: 'translate(-50%, -50%)',
+                            }} />
+                          </GoogleMarker>
+
+                          <GoogleMapPolyline 
+                            positions={[
+                              { lat: originCoords[0], lng: originCoords[1] },
+                              { lat: destCoords[0], lng: destCoords[1] }
+                            ]}
+                          />
+                          <RecenterGoogleMapToSelected />
+                        </GoogleMap>
+                      </APIProvider>
+                    </MapErrorBoundary>
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-white dark:bg-zinc-800 text-[#2d3748] dark:text-zinc-100 text-center animate-fade-in transition-colors overflow-y-auto">
+                      <div className="max-w-[360px] my-auto">
+                        <Key size={20} className="text-[#00d4aa] mx-auto mb-2" />
+                        <h3 className="text-sm font-bold text-[#2d3748] dark:text-zinc-100 mb-1">Clave de Google Maps Requerida</h3>
+                        <p className="text-[10px] text-gray-500 dark:text-zinc-400 mb-3 leading-relaxed">
+                          Para visualizar el mapa interactivo premium de su ruta escolar, agregue su clave <code className="bg-gray-100 dark:bg-zinc-900 px-1 py-0.5 rounded text-[#00d4aa] font-semibold flex-inline">GOOGLE_MAPS_PLATFORM_KEY</code> en ⚙️ <strong>Settings → Secrets</strong>.
+                        </p>
+                        <button 
+                          type="button"
+                          onClick={() => setShowGoogleMaps(false)}
+                          className="text-[10px] bg-gray-100 hover:bg-gray-200 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-[#4a5568] dark:text-zinc-300 font-extrabold uppercase px-3 py-1.5 rounded-lg transition-colors cursor-pointer shadow-xs inline-flex items-center gap-1"
+                        >
+                          Usar Leaflet alternativo
+                          <ArrowRight size={10} />
+                        </button>
+                      </div>
+                    </div>
+                  )
+                ) : (
+                  <MapContainer
+                    center={originCoords}
+                    zoom={13}
+                    scrollWheelZoom={true}
+                    style={{ height: '100%', width: '100%' }}
+                    zoomControl={false}
                   >
-                    <Popup>
-                      <div className="font-bold text-xs p-1">Punto de Origen (Arrastable)</div>
-                    </Popup>
-                  </Marker>
+                    <TileLayer
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      className="dark:brightness-75 dark:contrast-125 dark:hue-rotate-180 dark:invert"
+                    />
+                    
+                    {/* Punto de origen arrastrable */}
+                    <Marker 
+                      position={originCoords} 
+                      draggable={true}
+                      eventHandlers={{ dragend: handleDragOrigin }}
+                      icon={originIcon}
+                    >
+                      <Popup>
+                        <div className="font-bold text-xs p-1">Punto de Origen (Arrastable)</div>
+                      </Popup>
+                    </Marker>
 
-                  {/* Punto de destino arrastrable */}
-                  <Marker 
-                    position={destCoords} 
-                    draggable={true}
-                    eventHandlers={{ dragend: handleDragDest }}
-                    icon={destIcon}
-                  >
-                    <Popup>
-                      <div className="font-bold text-xs p-1">Punto de Destino (Arrastable)</div>
-                    </Popup>
-                  </Marker>
+                    {/* Punto de destino arrastrable */}
+                    <Marker 
+                      position={destCoords} 
+                      draggable={true}
+                      eventHandlers={{ dragend: handleDragDest }}
+                      icon={destIcon}
+                    >
+                      <Popup>
+                        <div className="font-bold text-xs p-1">Punto de Destino (Arrastable)</div>
+                      </Popup>
+                    </Marker>
 
-                  {/* Línea trazada conectando ambos puntos */}
-                  <Polyline 
-                    positions={[originCoords, destCoords]} 
-                    color="#00d4aa" 
-                    weight={4} 
-                    opacity={0.8}
-                    dashArray="6, 6" 
-                  />
+                    {/* Línea trazada conectando ambos puntos */}
+                    <Polyline 
+                      positions={[originCoords, destCoords]} 
+                      color="#00d4aa" 
+                      weight={4} 
+                      opacity={0.8}
+                      dashArray="6, 6" 
+                    />
 
-                  <RecenterMapToSelected />
-                </MapContainer>
+                    <RecenterMapToSelected />
+                    <InvalidateMapSize />
+                  </MapContainer>
+                )}
 
-                <div className="absolute top-3 right-3 z-[400] bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md px-2.5 py-1 rounded-md shadow-sm text-[10px] font-bold text-gray-500 max-w-[200px] leading-tight select-none border border-gray-150">
-                  💡 Arrastra los círculos para ajustar los puntos en el mapa
+                <div className="absolute bottom-3 left-3 z-[400] bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md px-2.5 py-1 rounded-md shadow-sm text-[10px] font-bold text-gray-500 max-w-[200px] leading-tight select-none border border-gray-150">
+                  💡 Arrastra los marcadores para ajustar origen y destino
                 </div>
               </div>
             </div>
@@ -413,24 +736,34 @@ export default function DriverCreateRoute() {
               />
             </div>
 
-            {/* Origen */}
-            <div>
-              <label className="flex items-center gap-2 text-[11px] font-bold text-[#00d4aa] mb-2 uppercase tracking-wider">
-                <MapPin size={14} /> Origen
-              </label>
-              <div className="relative">
-                <input 
-                  type="text" 
-                  value={origin}
-                  onChange={(e) => setOrigin(e.target.value)}
-                  placeholder="Punto de partida"
-                  className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl py-3.5 pl-4 pr-12 text-[#2d3748] dark:text-zinc-100 placeholder:text-[#a0aec0] dark:placeholder:text-zinc-500 focus:outline-none focus:border-[#00d4aa] focus:ring-1 focus:ring-[#00d4aa] transition-all text-[15px]"
-                />
-                <button type="button" className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 bg-[#00d4aa] rounded-lg flex items-center justify-center text-white hover:bg-[#00bfa0] transition-colors">
-                  <Target size={18} />
-                </button>
-              </div>
-            </div>
+             {/* Origen */}
+             <div>
+               <label className="flex items-center gap-2 text-[11px] font-bold text-[#00d4aa] mb-2 uppercase tracking-wider">
+                 <MapPin size={14} /> Origen
+               </label>
+               <div className="relative">
+                 <input 
+                   type="text" 
+                   value={origin}
+                   onChange={(e) => setOrigin(e.target.value)}
+                   placeholder="Punto de partida"
+                   className="w-full bg-white dark:bg-zinc-900 border border-gray-200 dark:border-zinc-700 rounded-xl py-3.5 pl-4 pr-12 text-[#2d3748] dark:text-zinc-100 placeholder:text-[#a0aec0] dark:placeholder:text-zinc-500 focus:outline-none focus:border-[#00d4aa] focus:ring-1 focus:ring-[#00d4aa] transition-all text-[15px]"
+                 />
+                 <button 
+                   type="button" 
+                   onClick={handleLocateCurrentPosition}
+                   disabled={isLocatingOrigin}
+                   title="Usar mi ubicación actual"
+                   className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 bg-[#00d4aa] rounded-lg flex items-center justify-center text-white hover:bg-[#00bfa0] transition-colors disabled:opacity-50 cursor-pointer"
+                 >
+                   {isLocatingOrigin ? (
+                     <div className="w-4 h-4 border-2 border-white rounded-full border-t-transparent animate-spin"></div>
+                   ) : (
+                     <Target size={18} />
+                   )}
+                 </button>
+               </div>
+             </div>
 
             {/* Destino */}
             <div>

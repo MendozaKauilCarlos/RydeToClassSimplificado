@@ -16,6 +16,8 @@ interface UserData {
   capacity?: string;
   name?: string; // added to support both displayName and name
   isOnline?: boolean;
+  rating?: number;
+  trips?: number;
 }
 
 interface AuthContextType {
